@@ -1,0 +1,27 @@
+opam-version: "2.0"
+name: "coolttviz"
+version: "0.0"
+maintainer: "Reed Mullanix <rmullani@umn.edu>"
+authors: ["The RedPRL Development Team"]
+homepage: "https://github.com/RedPRL/coolttviz"
+bug-reports: "https://github.com/RedPRL/coolttviz/issues"
+dev-repo: "git+https://github.com/RedPRL/coolttviz.git"
+synopsis: "Goal display for cooltt"
+license: "Apache-2.0"
+depends: [
+  "glMLite"
+  "containers" {>= "3.4"}
+  "cooltt"
+  "ezjsonm" {>= "1.2.0"}
+  # "menhir" {>= "20180703"}
+  # "uuseg" {>= "12.0.0"}
+  # "uutf" {>= "1.0.2"}
+  # "odoc" {with-doc}
+  # "bantorra"
+  # "yuujinchou"
+]
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+  ["dune" "build" "-p" name "-j" jobs "@runtest"] {with-test}
+  ["dune" "build" "-p" name "-j" jobs "@doc"] {with-doc}
+]

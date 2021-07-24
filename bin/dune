@@ -1,0 +1,6 @@
+(executable
+ (public_name coolttviz)
+ (name main)
+ (libraries coolttviz ezjsonm cooltt.cubical glMLite glMLite.glu glMLite.glut)
+ (flags
+  (:standard -w -6-32-37-38 -warn-error -a+31)))
