@@ -252,7 +252,9 @@ let display_lbl font () =
   glRotate !rotate_y 1. 0. 0.;
   glRotate !rotate_x 0. 1. 0.;
 
+  glRasterPos3 0. 0. 0.;
   Fonts.label font "a" 0. 0. 0.;
+  (* label "a" 0. 0. 0.; *)
 
   glPopMatrix();
   glFlush ()

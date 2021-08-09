@@ -25,9 +25,7 @@ let write_ppm path width height bytes =
     Printf.fprintf chan "%n %n\n" width height;
     (* Max color value, set to 255 as we will only be using grayscale. *)
     Printf.fprintf chan "255\n" ;
-    for i = 0 to ((Bigarray.Array1.size_in_bytes bytes / 2) - 1) do
-      output_byte chan @@ Bigarray.Array1.get bytes (i * 2)
-    done;
+    output_bytes chan bytes;
     close_out chan
   with e ->
     close_out_noerr chan;
@@ -38,8 +36,9 @@ let make_display_list (face : Face.t) (c : char) (list_base : int) (textures : t
   let tex_id = textures.(ccode) in
 
   let _ = Face.load_glyph face (Face.get_char_index face (Int64.of_int @@ Char.code c)) [Face.Render] in
-  let bitmap = Glyph.to_bitmap (Face.glyph face) RenderMode.Normal in
-  let bytes = Bitmap.bytes bitmap in
+  let bitmap_glyph = Glyph.to_bitmap (Face.glyph face) RenderMode.Normal in
+  let bitmap = BitmapGlyph.bitmap bitmap_glyph in
+  let bytes = Bitmap.byte_array bitmap in
 
   let width = pad_power (Bitmap.width bitmap) in
   let height = pad_power (Bitmap.height bitmap) in
@@ -54,13 +53,12 @@ let make_display_list (face : Face.t) (c : char) (list_base : int) (textures : t
         if (x >= Bitmap.width bitmap || y >= Bitmap.height bitmap)
         then 0
         else
-          Char.code @@ Bytes.get bytes (x + y*(Bitmap.width bitmap))
+          Bigarray.Array1.get bytes (x + y*(Bitmap.width bitmap))
       in
       Bigarray.Array1.set data (2*(x + y*width)) px;
       Bigarray.Array1.set data (2*(x + y*width) + 1) px
     done
   done;
-  Format.eprintf "Width: %n@.Height: %n@." (Bitmap.width bitmap) (Bitmap.height bitmap);
 
   glBindTexture GL_TEXTURE_2D tex_id;
   glTexParameter GL_TEXTURE_2D (GL_TEXTURE_MAG_FILTER GL_LINEAR);
@@ -69,10 +67,12 @@ let make_display_list (face : Face.t) (c : char) (list_base : int) (textures : t
 
   glNewList (list_base + ccode) GL_COMPILE;
   glBindTexture GL_TEXTURE_2D tex_id;
-  (* glPushMatrix (); *)
+  glPushMatrix ();
 
   (* We should translate by the bitmap glyph info here! *)
-  (* glTranslate __ __ 0.; *)
+  let bleft = Float.of_int @@ BitmapGlyph.left bitmap_glyph in
+  let btop = Float.of_int @@ BitmapGlyph.top bitmap_glyph - Bitmap.height bitmap in
+  glTranslate bleft btop 0.;
 
   let bwidth = Float.of_int @@ Bitmap.width bitmap in
   let bheight = Float.of_int @@ Bitmap.height bitmap in
@@ -94,7 +94,7 @@ let make_display_list (face : Face.t) (c : char) (list_base : int) (textures : t
 
   glEnd ();
 
-  (* glPopMatrix (); *)
+  glPopMatrix ();
   glEndList ()
 
 let init path =
@@ -112,18 +112,50 @@ let init path =
   { textures; list_base; list_size }
 
 let label t str x y z =
-  glPushAttrib [GL_LIST_BIT; GL_CURRENT_BIT; GL_ENABLE_BIT; GL_TRANSFORM_BIT];
-  glDisable GL_LIGHTING;
-  glEnable GL_TEXTURE_2D;
-  glDisable GL_DEPTH_TEST;
-  glEnable GL_BLEND;
-  glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA;
+  let lib = Library.init () in
+  let face = Face.create lib "/Users/reedmullanix/Library/Fonts/iosevka-fixed-regular.ttf"  0 in
+  Face.set_char_size face 0L (Int64.mul 12L 64L) 96 96;
 
-  let lines = Array.of_seq @@ Seq.map Char.code @@ String.to_seq str in
+  let _ = Face.load_glyph face (Face.get_char_index face (Int64.of_int @@ Char.code 'k')) [Face.Render] in
+  let bitmap_glyph = Glyph.to_bitmap (Face.glyph face) RenderMode.Normal in
+  let bitmap = BitmapGlyph.bitmap bitmap_glyph in
+  let bytes = Bitmap.bytes bitmap in
 
-  glListBase t.list_base;
 
-  glCallLists lines;
+  write_ppm "test.ppm" (Bitmap.width bitmap) (Bitmap.height bitmap) bytes;
 
-  glPopAttrib ();
+  (* Our images have the origin in the top-left corner,
+     whereas OpenGL expects them to be in the bottom left.
+     Therefore, we flip this around using 'glPixelZoom' *)
+  glPixelZoom 1.0 (-. 1.0);
+  glRasterPos3 1. 1. 0.;
+  glDrawPixels_str (Bitmap.width bitmap) (Bitmap.height bitmap) GL_LUMINANCE GL_UNSIGNED_BYTE (Bytes.to_string bytes);
+  (* glBitmap (Bitmap.width bitmap) (Bitmap.height bitmap) 0. 0. 0. 0. bytes; *)
+
+  Face.close face;
+  Library.close lib;
+
+  (* glPushAttrib [GL_LIST_BIT; GL_CURRENT_BIT; GL_ENABLE_BIT; GL_TRANSFORM_BIT];
+   * glDisable GL_LIGHTING;
+   * glEnable GL_TEXTURE_2D;
+   * glDisable GL_DEPTH_TEST;
+   * glEnable GL_BLEND;
+   * glBlendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA; *)
+
+  (* let lines = Array.of_seq @@ Seq.map Char.code @@ String.to_seq str in
+   * 
+   * glListBase t.list_base;
+   * 
+   * let modelMat = glGetMatrix GL_MODELVIEW_MATRIX in
+   * 
+   * glPushMatrix ();
+   * glLoadIdentity ();
+   * glTranslate x y z;
+   * glMultMatrix modelMat;
+   * 
+   * glCallLists lines; *)
+
+  (* glPopMatrix ();
+   * 
+   * glPopAttrib (); *)
 
