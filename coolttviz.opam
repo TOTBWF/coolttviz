@@ -20,6 +20,9 @@ depends: [
   # "bantorra"
   # "yuujinchou"
 ]
+pin-depends: [
+  [ "ocaml_freetype.~main" "https://github.com/TOTBWF/ocaml-freetype.git" ]
+]
 build: [
   ["dune" "build" "-p" name "-j" jobs]
   ["dune" "build" "-p" name "-j" jobs "@runtest"] {with-test}
