@@ -17,13 +17,12 @@ open Coolttviz.Hypercube
 
 module IntMap = Map.Make (Int)
 
+let font = Fonts.init "/Users/reedmullanix/Library/Fonts/iosevka-fixed-regular.ttf"
+
 let init() =
   glClearColor 0.0 0.0 0.0 0.0;
   glShadeModel GL_FLAT
 
-let label lbl x y z =
-  glRasterPos3 x y z;
-  lbl |> String.iter @@ fun c -> glutBitmapCharacter ~font:GLUT_BITMAP_9_BY_15 ~c
 
 let cube (n : int) (r : float) =
   glBegin GL_QUADS;
@@ -81,7 +80,7 @@ let render_boundary_constraints (dims : (int option) bwd) (env : Pp.env) (tm : S
       dim_from_cof dims bdry |> List.iter @@ fun bdry_dims ->
       let (x,y,z) = boundary_point num_dims (1.0) bdry_dims in
       let lbl = Format.asprintf "%a" (S.pp envx) cons in
-      label lbl x y z
+      Fonts.label font lbl x y z
   in
   match tm with
   | S.CofSplit branches ->
@@ -236,41 +235,6 @@ let rec server_loop socket =
     render_goal ctx goal;
     server_loop socket
 
-(* let () =
- *   let socket = server_init () in
- *   server_loop socket *)
-let display_lbl font () =
-  glClear ~mask:[GL_COLOR_BUFFER_BIT];
-  glColor3 ~r:0.0 ~g:1.0 ~b:0.0;
-  glLoadIdentity ();
-  gluLookAt ~eyeX:0.0 ~eyeY:0.0 ~eyeZ:4.0 ~centerX:0.0 ~centerY:0.0 ~centerZ:0.0 ~upX:0.0 ~upY:1.0 ~upZ:0.0;
-  glScale !zoom !zoom !zoom;
-
-  glPushMatrix();
-
-  glRotate !rotate_z 0. 0. 1.;
-  glRotate !rotate_y 1. 0. 0.;
-  glRotate !rotate_x 0. 1. 0.;
-
-  glRasterPos3 0. 0. 0.;
-  Fonts.label font "a" 0. 0. 0.;
-  (* label "a" 0. 0. 0.; *)
-
-  glPopMatrix();
-  glFlush ()
-
 let () =
-  let _ = glutInit ~argv:Sys.argv in
-  glutInitDisplayMode ~mode:[GLUT_SINGLE; GLUT_RGB];
-  glutInitWindowSize ~width:1000 ~height:1000;
-  glutInitWindowPosition ~x:100 ~y:100;
-  let _ = glutCreateWindow ~title:Sys.argv.(0) in
-  init ();
-  let font = Fonts.init "/Users/reedmullanix/Library/Fonts/iosevka-fixed-thin.ttf" in
-  glutDisplayFunc ~display:(display_lbl font);
-  glutReshapeFunc ~reshape;
-  glutKeyboardFunc ~keyboard;
-  glutMouseFunc ~mouse;
-  glutMotionFunc ~motion;
-  (* glutIdleFunc ~idle; *)
-  glutMainLoop()
+  let socket = server_init () in
+  server_loop socket
