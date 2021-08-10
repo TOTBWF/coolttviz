@@ -11,18 +11,12 @@ license: "Apache-2.0"
 depends: [
   "glMLite"
   "containers" {>= "3.4"}
-  "cooltt"
   "ezjsonm" {>= "1.2.0"}
   "uutf" {>= "1.0.2"}
-  # "menhir" {>= "20180703"}
-  # "uuseg" {>= "12.0.0"}
-  # "uutf" {>= "1.0.2"}
-  # "odoc" {with-doc}
-  # "bantorra"
-  # "yuujinchou"
 ]
 pin-depends: [
-  [ "ocaml_freetype.~main" "https://github.com/TOTBWF/ocaml-freetype.git" ]
+  [ "ocaml_freetype.~main" "git+https://github.com/TOTBWF/ocaml-freetype" ]
+  [ "cooltt.~serialize" "git+https://github.com/RedPRL/cooltt#serialize" ]
 ]
 build: [
   ["dune" "build" "-p" name "-j" jobs]
