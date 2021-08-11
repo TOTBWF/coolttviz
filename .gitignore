@@ -1,0 +1,9 @@
+_build/
+cbits/CMakeFiles
+cbits/CMakeCache.txt
+cbits/cmake_install.cmake
+cbits/compile_commands.json
+cbits/.cache
+cbits/*.dylib
+cbits/coolttviz
+cbits/Makefile
