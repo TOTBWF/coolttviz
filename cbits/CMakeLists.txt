@@ -14,6 +14,9 @@ endif(APPLE)
 find_package(SDL2 REQUIRED)
 include_directories(${SDL2_INCLUDE_DIRS})
 
+# CGLM
+list(APPEND COOLTTVIZ_LIBRARIES cglm_headers)
+
 # ImGUI
 add_definitions("-DIMGUI_IMPL_API=extern \"C\" ")
 set(CIMGUI_VENDOR ../vendor/cimgui)
@@ -46,5 +49,6 @@ target_link_libraries(cimgui_sdl ${IMGUI_LIBRARIES} ${SDL2_LIBRARIES})
 # Compiling the actual executable.
 include_directories(${CIMGUI_VENDOR}/generator/output/)
 
-add_executable(coolttviz main.c)
-target_link_libraries(coolttviz ${SDL2_LIBRARIES} cimgui_sdl)
+add_executable(coolttviz shader.c main.c)
+target_link_libraries(coolttviz ${COOLTTVIZ_LIBRARIES} ${SDL2_LIBRARIES} cimgui_sdl)
+add_subdirectory(../vendor/cglm ./build)
