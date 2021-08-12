@@ -3,11 +3,13 @@
 #include "SDL_events.h"
 #include "SDL_keycode.h"
 #include <stdlib.h>
+#include <string.h>
 #define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
 #include "cimgui.h"
 #include "cimgui_extras.h"
 #include "cimgui_impl.h"
 #include <stdio.h>
+#include <stdint.h>
 #include <math.h>
 
 #include <cglm/cglm.h>
@@ -23,78 +25,110 @@
 #define igButton igButton_Str
 #endif
 
-
 #include "shader.h"
 
 SDL_Window *window = NULL;
 
-int choose(int n, int k) {
-  int r = 1;
-  for(int i = 1; i <= k; i++, n--) {
-    r = r/i * n + r%i * n/i;
-  }
-  return r;
+/*!
+ * Insert a single zero bit into [bits] at position [ix], shifting
+ * over all bits to the left of the index.
+ */
+inline uint32_t insert_bit(uint32_t bits, int ix) {
+  uint32_t upper_mask = UINT32_MAX << (ix + 1);
+  uint32_t upper = upper_mask & (bits << 1);
+  uint32_t lower_mask = (1 << ix) - 1;
+  uint32_t lower = lower_mask & bits;
+  return upper | lower;
 }
 
-int *faces(int n) {
-  int *cs = malloc(sizeof(int) * choose(n, 2) * 2);
-  int ix = 0;
-  for (int i = 0; i <= n - 2; i++) {
-    for (int j = i + 1; j <= n - 1; j++) {
-      if (ix >= choose(n, 2) * 2) {
-        printf("Choose: %d\n", choose(n, 2) * 2);
-        exit(1);
-      }
-      cs[ix] = i;
-      cs[ix + 1] = j;
-      ix += 2;
+inline uint32_t power_of_2(int p) {
+  return (1 << p);
+}
+
+/*!
+ * Project down an n-dimensional vector into a 3-dimensional one.
+ */
+void project(float *v, int n, float *out) {
+  float view_angle = glm_rad(45.0f);
+  float t = tan(view_angle / 2.0f);
+
+  float tmp[n];
+  memcpy(tmp, v, sizeof(float) * n);
+
+  for(int k = n; k > 3; k--) {
+    float proj = tmp[k - 1] + 3.0f;
+    for (int i = 0; i < k - 1; i++) {
+      tmp[i] = (t * tmp[i]) / proj;
     }
   }
-  return cs;
+
+  out[0] = tmp[0];
+  out[1] = tmp[1];
+  out[2] = tmp[2];
 }
 
-// So what I want to do here is just feed these faces into the vertex shader?
-// Yeah, these are the 2 dimensions we vary to form the face. We then need to iterate
-// over all of the possible faces that can have those faces vary. For a 3-cube this is
-// easy (there is just 1)
+// The general plan here is to build up a bunch of lines.
+float *hypercube(int n, float size) {
+  float e0[n];
+  float e1[n];
 
+  // Each line consists of 2 vec3 endpoints, and there are 2^(n - 1)*n lines.
+  float *points = malloc(2 * sizeof(float) * 3 * power_of_2(n - 1) * n);
+  int point_offset = 0;
+
+  // We start by selecting what dimensions we will be drawing lines along.
+  for (int line_dim = 0; line_dim < n; line_dim++) {
+    // Next, we select where the line will be positioned.
+    for(uint32_t pos = 0; pos < power_of_2(n - 1); pos++) {
+      uint32_t point = insert_bit(pos, line_dim);
+
+      // Compute the n-dimensional endpoint vectors, then
+      // project them down into their 3d representations.
+      for (int i = 0; i < n; i++) {
+        if (i == line_dim) {
+          e0[i] = -size;
+          e1[i] = size;
+        } else {
+          float c = (1 << i) & point ? size : -size;
+          e0[i] = e1[i] = c;
+        }
+      }
+
+      project(e0, n, points + point_offset);
+      point_offset += 3;
+      project(e1, n, points + point_offset);
+      point_offset += 3;
+    }
+  }
+
+  return points;
+}
 GLuint vertex_array;
 GLuint vertex_buffer;
-GLuint element_buffer;
 GLuint program;
 
 mat4 model;
 mat4 view;
 mat4 projection;
 
-float vertices[] = {
-    0.5f,  0.5f,  0.0f, // top right
-    0.5f,  -0.5f, 0.0f, // bottom right
-    -0.5f, -0.5f, 0.0f, // bottom left
-    -0.5f, 0.5f,  0.0f  // top left
-};
-unsigned int indices[] = {
-    // note that we start from 0!
-    0, 1, 3, // first Triangle
-    1, 2, 3  // second Triangle
-};
-
 void init() {
   glGenVertexArrays(1, &vertex_array);
   glGenBuffers(1, &vertex_buffer);
-  glGenBuffers(1, &element_buffer);
 
   glBindVertexArray(vertex_array);
 
-  glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+  int n = 4;
+  float *vertices = hypercube(n, 1.0f);
+  int num_vertices = (2 * power_of_2(n - 1) * n);
 
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, element_buffer);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+  glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
+  glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * num_vertices, vertices, GL_STATIC_DRAW);
 
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 
   glEnableVertexAttribArray(0);
+
+  // Unbind the VBO/VAO so any further calls do not modify them.
   glBindBuffer(GL_ARRAY_BUFFER, 0);
   glBindVertexArray(0);
 
@@ -103,13 +137,11 @@ void init() {
   glm_mat4_identity(projection);
 
   glm_perspective(glm_rad(45.0f), 800.0f / 600.0f, 0.1f, 100.0f, projection);
-  glm_translate(view, (vec3) {0.0f, 0.0f, -3.0f});
+  glm_translate(view, (vec3) {0.0f, 0.0f, -1.0f});
 
   program = load_shader("vertex.glsl", "fragment.glsl");
 
-  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 }
-
 
 void render() {
   glClearColor(0,0,0,0);
@@ -121,13 +153,17 @@ void render() {
   int view_loc = glGetUniformLocation(program, "view");
   int projection_loc = glGetUniformLocation(program, "projection");
 
+  glm_rotate(model, glm_rad(1.0f), (vec3) {0.0f, 1.0f, 0.0f});
+
   glUniformMatrix4fv(model_loc, 1, GL_FALSE, (float*) model);
   glUniformMatrix4fv(view_loc, 1, GL_FALSE, (float*) view);
   glUniformMatrix4fv(projection_loc, 1, GL_FALSE, (float*) projection);
 
+  int n = 4;
+  int num_vertices = (2 * power_of_2(n - 1) * n);
+
   glBindVertexArray(vertex_array);
-  glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-  /* glDrawArrays(GL_TRIANGLES, 0, 3); */
+  glDrawArrays(GL_LINES, 0, num_vertices);
 }
 
 int main(int argc, char* argv[]) {
@@ -220,22 +256,13 @@ int main(int argc, char* argv[]) {
       igBegin("Hello, world!", NULL, 0);
       igSliderInt("Dimension", &dim, 2, 10, "%d", 0);
 
-      dims = faces(dim);
-      asprintf(&msg, "Dim: %d", dim);
-
-      msg[0] = '\0';
-      for(int i = 0; i < choose(dim, 2); i++) {
-        char *dim_str;
-        asprintf(&dim_str, "{%d, %d}", dims[2*i], dims[2*i+1]);
-        strcat(msg, dim_str);
-      }
-
       igText("Dimensions: %s", msg);
       igText("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / igGetIO()->Framerate, igGetIO()->Framerate);
       igEnd();
     }
 
     igRender();
+    /* glViewport(0, 0, (int)ioptr->DisplaySize.x, (int)ioptr->DisplaySize.y); */
     render();
 
     ImGui_ImplOpenGL3_RenderDrawData(igGetDrawData());
