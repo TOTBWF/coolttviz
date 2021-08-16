@@ -17,6 +17,9 @@ include_directories(${SDL2_INCLUDE_DIRS})
 # CGLM
 list(APPEND COOLTTVIZ_LIBRARIES cglm_headers)
 
+# FreeType
+find_package(Freetype REQUIRED)
+
 # ImGUI
 add_definitions("-DIMGUI_IMPL_API=extern \"C\" ")
 set(CIMGUI_VENDOR ../vendor/cimgui)
@@ -48,7 +51,9 @@ target_link_libraries(cimgui_sdl ${IMGUI_LIBRARIES} ${SDL2_LIBRARIES})
 
 # Compiling the actual executable.
 include_directories(${CIMGUI_VENDOR}/generator/output/)
+include_directories(./)
 
-add_executable(coolttviz shader.c main.c)
-target_link_libraries(coolttviz ${COOLTTVIZ_LIBRARIES} ${SDL2_LIBRARIES} cimgui_sdl)
+add_executable(coolttviz cube.c shader.c main.c)
+target_link_libraries(coolttviz ${COOLTTVIZ_LIBRARIES} ${FREETYPE_LIBRARIES} ${SDL2_LIBRARIES} cimgui_sdl)
+target_include_directories(coolttviz PRIVATE ${FREETYPE_INCLUDE_DIRS})
 add_subdirectory(../vendor/cglm ./build)

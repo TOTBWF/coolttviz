@@ -2,6 +2,10 @@
 #include "GL/glcorearb.h"
 #include "SDL_events.h"
 #include "SDL_keycode.h"
+#include "cglm/affine.h"
+#include "cglm/cam.h"
+#include "cglm/mat4.h"
+#include "cglm/project.h"
 #include <stdlib.h>
 #include <string.h>
 #define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
@@ -26,143 +30,135 @@
 #endif
 
 #include "shader.h"
+#include "cube.h"
 
 SDL_Window *window = NULL;
 
-/*!
- * Insert a single zero bit into [bits] at position [ix], shifting
- * over all bits to the left of the index.
- */
-inline uint32_t insert_bit(uint32_t bits, int ix) {
-  uint32_t upper_mask = UINT32_MAX << (ix + 1);
-  uint32_t upper = upper_mask & (bits << 1);
-  uint32_t lower_mask = (1 << ix) - 1;
-  uint32_t lower = lower_mask & bits;
-  return upper | lower;
-}
+typedef struct scene_ {
+  int window_width;
+  int window_height;
 
-inline uint32_t power_of_2(int p) {
-  return (1 << p);
-}
+  // Camera Controls.
+  float azimuth;
+  float polar;
+  float radius;
 
-/*!
- * Project down an n-dimensional vector into a 3-dimensional one.
- */
-void project(float *v, int n, float *out) {
-  float view_angle = glm_rad(45.0f);
-  float t = tan(view_angle / 2.0f);
+  GLuint cube_vao;
+  GLuint cube_vbo;
+  float *cube_vertices;
+  int dim;
 
-  float tmp[n];
-  memcpy(tmp, v, sizeof(float) * n);
+  GLuint label_vao;
+  GLuint label_vbo;
 
-  for(int k = n; k > 3; k--) {
-    float proj = tmp[k - 1] + 3.0f;
-    for (int i = 0; i < k - 1; i++) {
-      tmp[i] = (t * tmp[i]) / proj;
-    }
-  }
+  mat4 model;
+  mat4 view;
+  mat4 projection;
 
-  out[0] = tmp[0];
-  out[1] = tmp[1];
-  out[2] = tmp[2];
-}
+  GLuint shader;
+} scene;
 
-// The general plan here is to build up a bunch of lines.
-float *hypercube(int n, float size) {
-  float e0[n];
-  float e1[n];
+void init(int n, scene* scene) {
+  scene->dim = n;
 
-  // Each line consists of 2 vec3 endpoints, and there are 2^(n - 1)*n lines.
-  float *points = malloc(2 * sizeof(float) * 3 * power_of_2(n - 1) * n);
-  int point_offset = 0;
+  // Cube Initialization
+  glGenVertexArrays(1, &scene->cube_vao);
+  glGenBuffers(1, &scene->cube_vbo);
 
-  // We start by selecting what dimensions we will be drawing lines along.
-  for (int line_dim = 0; line_dim < n; line_dim++) {
-    // Next, we select where the line will be positioned.
-    for(uint32_t pos = 0; pos < power_of_2(n - 1); pos++) {
-      uint32_t point = insert_bit(pos, line_dim);
+  glBindVertexArray(scene->cube_vao);
 
-      // Compute the n-dimensional endpoint vectors, then
-      // project them down into their 3d representations.
-      for (int i = 0; i < n; i++) {
-        if (i == line_dim) {
-          e0[i] = -size;
-          e1[i] = size;
-        } else {
-          float c = (1 << i) & point ? size : -size;
-          e0[i] = e1[i] = c;
-        }
-      }
+  float *cube_vertices = hypercube(n, 1.0f);
+  int num_vertices = hypercube_vertices(n);
 
-      project(e0, n, points + point_offset);
-      point_offset += 3;
-      project(e1, n, points + point_offset);
-      point_offset += 3;
-    }
-  }
-
-  return points;
-}
-GLuint vertex_array;
-GLuint vertex_buffer;
-GLuint program;
-
-mat4 model;
-mat4 view;
-mat4 projection;
-
-void init() {
-  glGenVertexArrays(1, &vertex_array);
-  glGenBuffers(1, &vertex_buffer);
-
-  glBindVertexArray(vertex_array);
-
-  int n = 4;
-  float *vertices = hypercube(n, 1.0f);
-  int num_vertices = (2 * power_of_2(n - 1) * n);
-
-  glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
-  glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * num_vertices, vertices, GL_STATIC_DRAW);
+  glBindBuffer(GL_ARRAY_BUFFER, scene->cube_vbo);
+  glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * num_vertices, cube_vertices, GL_DYNAMIC_DRAW);
 
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 
   glEnableVertexAttribArray(0);
 
-  // Unbind the VBO/VAO so any further calls do not modify them.
+  // Label Initialization
+  glGenVertexArrays(1, &scene->label_vao);
+  glGenBuffers(1, &scene->label_vbo);
+
+  glBindVertexArray(scene->label_vao);
+  glBindBuffer(GL_ARRAY_BUFFER, scene->cube_vbo);
+  // We only store enough data in the label VBO to render a single character.
+  glBufferData(GL_ARRAY_BUFFER, 6 * 4 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
+
+  glEnableVertexAttribArray(0);
+
   glBindBuffer(GL_ARRAY_BUFFER, 0);
   glBindVertexArray(0);
 
-  glm_mat4_identity(model);
-  glm_mat4_identity(view);
-  glm_mat4_identity(projection);
+  scene->shader = load_shader("vertex.glsl", "fragment.glsl");
 
-  glm_perspective(glm_rad(45.0f), 800.0f / 600.0f, 0.1f, 100.0f, projection);
-  glm_translate(view, (vec3) {0.0f, 0.0f, -1.0f});
-
-  program = load_shader("vertex.glsl", "fragment.glsl");
-
+  // Matrices
+  glm_mat4_identity(scene->model);
+  glm_mat4_identity(scene->view);
+  glm_mat4_identity(scene->projection);
 }
 
-void render() {
+void render_label(scene* scene, char *label, float *label_pos) {
+  vec4 label_pos_proj;
+
+  project(label_pos, scene->dim, label_pos_proj);
+  // We need to set the 'w' component to 0 here to make the conversion
+  // into Normalized Device Coordinates work.
+  label_pos_proj[3] = 1.0f;
+
+  glm_mat4_mulv(scene->model, label_pos_proj, label_pos_proj);
+  glm_mat4_mulv(scene->view, label_pos_proj, label_pos_proj);
+  glm_mat4_mulv(scene->projection, label_pos_proj, label_pos_proj);
+
+  float x_ndc = label_pos_proj[0] / label_pos_proj[3];
+  float y_ndc = label_pos_proj[1] / label_pos_proj[3];
+
+  ImVec2 window_pos;
+  window_pos.x = ((1.0f + x_ndc) / 2) * scene->window_width;
+  window_pos.y = ((1.0f - y_ndc) / 2) * scene->window_height;
+
+  ImVec2 pivot;
+  pivot.x = 0.0f;
+  pivot.y = 0.0f;
+
+  igSetNextWindowPos(window_pos, ImGuiCond_Always, pivot);
+  igBegin(label, NULL, 0);
+  igText("Look, more stuff!");
+  igEnd();
+}
+
+void render(scene *scene) {
+  glViewport(0, 0, scene->window_width, scene->window_height);
+
   glClearColor(0,0,0,0);
   glClear(GL_COLOR_BUFFER_BIT);
 
-  glUseProgram(program);
+  glUseProgram(scene->shader);
 
-  int model_loc = glGetUniformLocation(program, "model");
-  int view_loc = glGetUniformLocation(program, "view");
-  int projection_loc = glGetUniformLocation(program, "projection");
+  int model_loc = glGetUniformLocation(scene->shader, "model");
+  int view_loc = glGetUniformLocation(scene->shader, "view");
+  int projection_loc = glGetUniformLocation(scene->shader, "projection");
 
-  glm_rotate(model, glm_rad(1.0f), (vec3) {0.0f, 1.0f, 0.0f});
+  float aspect = ((float) scene->window_width) / ((float) scene->window_height);
+  vec3 eye = {
+    scene->radius * cos(scene->polar) * cos(scene->azimuth),
+    scene->radius * sin(scene->polar),
+    scene->radius * cos(scene->polar) * sin(scene->azimuth)
+  };
+  vec3 origin = { 0.0f, 0.0f, 0.0f };
+  vec3 up = { 0.0f, 1.0f, 0.0f };
 
-  glUniformMatrix4fv(model_loc, 1, GL_FALSE, (float*) model);
-  glUniformMatrix4fv(view_loc, 1, GL_FALSE, (float*) view);
-  glUniformMatrix4fv(projection_loc, 1, GL_FALSE, (float*) projection);
+  glm_lookat(eye, origin, up, scene->view);
+  glm_perspective(glm_rad(45.0f), aspect, 0.1f, 100.0f, scene->projection);
 
-  int n = 4;
-  int num_vertices = (2 * power_of_2(n - 1) * n);
+  glUniformMatrix4fv(model_loc, 1, GL_FALSE, (float*) scene->model);
+  glUniformMatrix4fv(view_loc, 1, GL_FALSE, (float*) scene->view);
+  glUniformMatrix4fv(projection_loc, 1, GL_FALSE, (float*) scene->projection);
 
-  glBindVertexArray(vertex_array);
+  int num_vertices = hypercube_vertices(scene->dim);
+
+  glBindVertexArray(scene->cube_vao);
   glDrawArrays(GL_LINES, 0, num_vertices);
 }
 
@@ -226,10 +222,13 @@ int main(int argc, char* argv[]) {
 
   igStyleColorsDark(NULL);
 
-  init();
+  int dim = 4;
+  scene scene;
+  scene.radius = 4.0f;
+  init(dim, &scene);
 
-  int dim = 2;
   bool quit = false;
+  bool mouse_down = false;
   while (!quit)
   {
     SDL_Event e;
@@ -243,34 +242,47 @@ int main(int argc, char* argv[]) {
         quit = true;
       if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_CLOSE && e.window.windowID == SDL_GetWindowID(window))
         quit = true;
-      if (e.type == SDL_KEYUP && e.key.keysym.sym == SDLK_ESCAPE)
-        quit = true;
+      // Keyboard
+      if (!ioptr->WantCaptureKeyboard) {
+        if (e.type == SDL_KEYUP && e.key.keysym.sym == SDLK_ESCAPE)
+          quit = true;
+      }
+      // Mouse
+      if (!ioptr->WantCaptureMouse) {
+        if (e.type == SDL_MOUSEWHEEL && e.wheel.y > 0)
+          scene.radius += 0.1;
+        if (e.type == SDL_MOUSEWHEEL && e.wheel.y < 0)
+          scene.radius -= 0.1;
+        if (e.type == SDL_MOUSEBUTTONDOWN)
+          mouse_down = true;
+        if (e.type == SDL_MOUSEBUTTONUP)
+          mouse_down = false;
+        if (e.type == SDL_MOUSEMOTION && mouse_down) {
+          // FIXME: If the polar angle goes over pi/2 radians, then things flip.
+          scene.azimuth += e.motion.xrel / 100.0f;
+          scene.polar += e.motion.yrel / 100.0f;
+        }
+      }
     }
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL2_NewFrame(window);
-    igNewFrame();
-    char *msg;
-    int *dims;
 
-    {
-      igBegin("Hello, world!", NULL, 0);
-      igSliderInt("Dimension", &dim, 2, 10, "%d", 0);
+    scene.window_width = ioptr->DisplaySize.x;
+    scene.window_height = ioptr->DisplaySize.y;
 
-      igText("Dimensions: %s", msg);
-      igText("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / igGetIO()->Framerate, igGetIO()->Framerate);
-      igEnd();
+    if(dim != scene.dim) {
+      free(scene.cube_vertices);
+      init(dim, &scene);
     }
 
+
+    igNewFrame();
+    render(&scene);
     igRender();
-    /* glViewport(0, 0, (int)ioptr->DisplaySize.x, (int)ioptr->DisplaySize.y); */
-    render();
 
     ImGui_ImplOpenGL3_RenderDrawData(igGetDrawData());
     SDL_GL_MakeCurrent(window, gl_context);
     SDL_GL_SwapWindow(window);
-
-    free(msg);
-    free(dims);
   }
 
   ImGui_ImplOpenGL3_Shutdown();
