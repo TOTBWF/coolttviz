@@ -1,7 +1,7 @@
 OPAM=opam
 EXEC=${OPAM} config exec
 DUNE=${EXEC} dune --
-PIN_DEPENDS=ocaml_freetype
+PIN_DEPENDS=ocaml_freetype cooltt
 
 .PHONY: build run
 

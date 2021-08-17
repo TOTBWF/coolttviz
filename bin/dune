@@ -1,6 +1,17 @@
 (executable
  (public_name coolttviz)
  (name main)
- (libraries ocaml_freetype.freetype coolttviz ezjsonm cooltt.cubical glMLite glMLite.glu glMLite.glut)
+ (libraries ctypes.foreign ctypes ezjsonm cooltt.cubical cooltt.core)
+ (foreign_archives ../cbits/coolttviz)
+ (link_flags -cclib "-framework CoreFoundation -lstdc++ -lsdl2 -force_load bin/libcoolttviz.a")
  (flags
   (:standard -w -6-32-37-38 -warn-error -a+31)))
+
+(data_only_dirs cbits)
+
+(rule
+ (deps (universe))
+ (targets libcoolttviz.a)
+ (action
+  (no-infer
+     (copy cbits/libcoolttviz.a libcoolttviz.a))))

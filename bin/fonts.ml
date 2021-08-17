@@ -33,7 +33,7 @@ let write_ppm path width height bytes =
 let init path =
   let lib = Library.init () in
   let face = Face.create lib path 0 in
-  Face.set_char_size face 0L (Int64.mul 12L 64L) 96 96;
+  Face.set_char_size face 0L (Int64.mul 9L 64L) 96 96;
   { lib; face }
 
 (* FIXME: Horrible hack! *)

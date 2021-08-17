@@ -9,13 +9,11 @@ dev-repo: "git+https://github.com/RedPRL/coolttviz.git"
 synopsis: "Goal display for cooltt"
 license: "Apache-2.0"
 depends: [
-  "glMLite"
   "containers" {>= "3.4"}
   "ezjsonm" {>= "1.2.0"}
   "uutf" {>= "1.0.2"}
 ]
 pin-depends: [
-  [ "ocaml_freetype.~main" "git+https://github.com/TOTBWF/ocaml-freetype" ]
   [ "cooltt.~serialize" "git+https://github.com/RedPRL/cooltt#serialize" ]
 ]
 build: [
