@@ -1,7 +1,6 @@
 use glium::*;
 use imgui::*;
 
-use nalgebra::vector;
 use nalgebra::{Point3, Vector3, Vector4, Matrix4};
 
 use crate::linalg;
@@ -10,9 +9,10 @@ use crate::cube;
 #[derive(Copy, Clone, Debug)]
 pub struct Vertex {
     pub position: [f32; 3],
+    pub color: [f32; 3]
 }
 
-implement_vertex!(Vertex, position);
+implement_vertex!(Vertex, position, color);
 
 pub struct Label {
     pub position: Vec<f32>,
@@ -32,8 +32,8 @@ pub struct Scene {
     labels: Vec<Label>,
 }
 
-fn to_window_coords(mvp: Matrix4<f32>, width: f32, height: f32, v : Vertex) -> [f32; 2] {
-    let pos = mvp * Vector4::new(v.position[0], v.position[1], v.position[2], 1.0);
+fn to_window_coords(mvp: Matrix4<f32>, width: f32, height: f32, v : [f32; 3]) -> [f32; 2] {
+    let pos = mvp * Vector4::new(v[0], v[1], v[2], 1.0);
     let x_ndc = pos[0] / pos[3];
     let y_ndc = pos[1] / pos[3];
 
@@ -43,10 +43,17 @@ fn to_window_coords(mvp: Matrix4<f32>, width: f32, height: f32, v : Vertex) -> [
     ]
 }
 
+fn hypercube_geometry(dim: u32, size: f32) -> Vec<Vertex> {
+    let vertices = cube::hypercube(dim, size);
+    vertices.iter()
+        .map(|v| Vertex { position: *v, color: [0.0, 0.0, 0.0] })
+        .collect()
+}
+
 
 fn render_label(ui: &Ui, mvp: Matrix4<f32>, lbl: &Label) {
     let [width, height] = ui.io().display_size;
-    let projected = Vertex { position: linalg::project(&lbl.position) };
+    let projected = linalg::project(&lbl.position);
     let window_pos = to_window_coords(mvp, width, height, projected);
 
     // We need to set the 'w' component to 1 here to make the conversion
@@ -70,7 +77,7 @@ pub fn init_scene(display: &glium::Display, dim : u32, labels: Vec<Label>) -> Sc
         fragment: include_str!("../resources/shader.frag")
     }).unwrap();
 
-    let cube_geometry = cube::hypercube(dim, 1.0);
+    let cube_geometry = hypercube_geometry(dim, 1.0);
     let cube_vbo = glium::VertexBuffer::dynamic(display, &cube_geometry).unwrap();
 
     Scene {
@@ -93,7 +100,7 @@ pub fn render_frame(ui: &Ui, scene : &Scene, target: &mut Frame) {
         scene.radius * scene.polar.cos() * scene.azimuth.sin(),
     );
     let origin : Point3<f32> = Point3::new(0.0, 0.0, 0.0);
-    let up : Vector3<f32> = vector![0.0, 1.0, 0.0];
+    let up : Vector3<f32> = Vector3::new(0.0, 1.0, 0.0);
     let view = Matrix4::look_at_rh(&eye, &origin, &up);
 
     let aspect = width / height;

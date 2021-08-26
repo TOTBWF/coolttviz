@@ -1,6 +1,5 @@
 use std::convert::TryInto;
 
-use crate::render::Vertex;
 use crate::linalg;
 
 fn insert_bit(bits : u32, ix : u32) -> u32 {
@@ -16,7 +15,7 @@ fn hypercube_vertices(dim: u32) -> u32 {
 }
 
 
-pub fn hypercube(dim: u32, size: f32) -> Vec<Vertex> {
+pub fn hypercube(dim: u32, size: f32) -> Vec<[f32; 3]> {
     let capacity = (hypercube_vertices(dim) * dim).try_into().unwrap();
     let mut points = Vec::with_capacity(capacity);
     let dim_size : usize = dim.try_into().unwrap();
@@ -43,8 +42,8 @@ pub fn hypercube(dim: u32, size: f32) -> Vec<Vertex> {
                     e1[i as usize] = c;
                 }
             }
-            points.push(Vertex { position: linalg::project(&e0) });
-            points.push(Vertex { position: linalg::project(&e1) });
+            points.push(linalg::project(&e0));
+            points.push(linalg::project(&e1));
         }
     }
     points
