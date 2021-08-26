@@ -3,8 +3,10 @@ use imgui::*;
 
 use nalgebra::{Point3, Vector3, Vector4, Matrix4};
 
+use crate::system;
 use crate::linalg;
 use crate::cube;
+use crate::messages::{DisplayGoal, Label};
 
 #[derive(Copy, Clone, Debug)]
 pub struct Vertex {
@@ -13,11 +15,6 @@ pub struct Vertex {
 }
 
 implement_vertex!(Vertex, position, color);
-
-pub struct Label {
-    pub position: Vec<f32>,
-    pub txt: String
-}
 
 pub struct Scene {
     // Camera Controls
@@ -30,6 +27,7 @@ pub struct Scene {
     cube_vbo: glium::VertexBuffer<Vertex>,
 
     labels: Vec<Label>,
+    context: String
 }
 
 fn to_window_coords(mvp: Matrix4<f32>, width: f32, height: f32, v : [f32; 3]) -> [f32; 2] {
@@ -56,17 +54,27 @@ fn render_label(ui: &Ui, mvp: Matrix4<f32>, lbl: &Label) {
     let projected = linalg::project(&lbl.position);
     let window_pos = to_window_coords(mvp, width, height, projected);
 
-    // We need to set the 'w' component to 1 here to make the conversion
-    // into Normalized Device Coordinates work.
-    let title = unsafe { ImStr::from_utf8_with_nul_unchecked(lbl.txt.as_bytes()) };
-    Window::new(title)
+    let title =
+        if lbl.txt.len() > 10 {
+            format!("{}...##{}\0", lbl.txt[0..9 - 3].to_owned(), lbl.txt)
+        } else {
+            format!("{}##{}\0", lbl.txt, lbl.txt)
+        };
+
+
+
+    let title_imstr = unsafe { ImStr::from_utf8_with_nul_unchecked(title.as_bytes()) };
+    // let lbl_imstr = unsafe { ImStr::from_utf8_with_nul_unchecked(lbl.as_bytes()) };
+    Window::new(title_imstr)
         .position(window_pos, Condition::Always)
         .size([100.0, 100.0], Condition::Appearing)
         .collapsed(true, Condition::Appearing)
-        .build(ui, || {})
+        .build(ui, || {
+            ui.text(format!("{}\0", lbl.txt));
+        });
 }
 
-pub fn init_scene(display: &glium::Display, dim : u32, labels: Vec<Label>) -> Scene {
+fn init_scene(display: &glium::Display, DisplayGoal { dim, labels, context }: DisplayGoal) -> Scene {
     let azimuth = 90.0_f32.to_radians();
     let polar = 0.0;
     let radius = 4.0;
@@ -86,11 +94,12 @@ pub fn init_scene(display: &glium::Display, dim : u32, labels: Vec<Label>) -> Sc
         radius,
         program,
         cube_vbo,
-        labels
+        labels,
+        context
     }
 }
 
-pub fn render_frame(ui: &Ui, scene : &Scene, target: &mut Frame) {
+fn render_frame(ui: &Ui, scene : &Scene, target: &mut Frame) {
     let model : Matrix4<f32> = Matrix4::identity();
     let [width, height] = ui.io().display_size;
 
@@ -122,7 +131,32 @@ pub fn render_frame(ui: &Ui, scene : &Scene, target: &mut Frame) {
     let draw_params = Default::default();
 
     target.draw(&scene.cube_vbo, &glium::index::NoIndices(glium::index::PrimitiveType::LinesList), &scene.program, &uniforms, &draw_params).unwrap();
+
+    let ctx = unsafe { ImStr::from_utf8_with_nul_unchecked(scene.context.as_bytes()) };
+    Window::new(im_str!("Context")).build(ui, || {
+        ui.text_wrapped(ctx)
+    });
+
     for lbl in &scene.labels {
         render_label(ui, mvp, lbl);
     }
+}
+
+pub fn display_goal(msg : DisplayGoal) {
+    let system = system::init(file!());
+
+    let mut scene = init_scene(&system.display, msg);
+    system.main_loop(move |_, target, ui| {
+        let io = ui.io();
+        if !io.want_capture_mouse {
+            let [delta_x, delta_y] = io.mouse_delta;
+            if ui.is_mouse_down(MouseButton::Left) {
+                scene.azimuth += delta_x / 300.0;
+                scene.polar += delta_y / 300.0;
+            }
+            scene.radius += 0.1_f32 * io.mouse_wheel;
+        }
+
+        render_frame(ui, &scene, target);
+    })
 }

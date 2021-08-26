@@ -185,10 +185,12 @@ name = "coolttviz-rs"
 version = "0.1.0"
 dependencies = [
  "glium",
- "imgui",
+ "imgui 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "imgui-glium-renderer",
  "imgui-winit-support",
  "nalgebra",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -502,6 +504,12 @@ name = "imgui"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "24cfcf6e3326886321c5d637caf1ce217006651059015fae372b1c49c0e722b2"
+replace = "imgui 0.7.0 (git+https://github.com/imgui-rs/imgui-rs)"
+
+[[package]]
+name = "imgui"
+version = "0.7.0"
+source = "git+https://github.com/imgui-rs/imgui-rs#794ece895673a94fe480e1d81587108f34c8f586"
 dependencies = [
  "bitflags",
  "imgui-sys",
@@ -515,14 +523,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8c295c510c0d7209cf2304741808425bcd8e421142679d2448a38d4aa51762f3"
 dependencies = [
  "glium",
- "imgui",
+ "imgui 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "imgui-sys"
 version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85ca00be6b78bf02b57e91468cf19d08dfcc11d0fb3c2f3dc491c29404d8d330"
+source = "git+https://github.com/imgui-rs/imgui-rs#794ece895673a94fe480e1d81587108f34c8f586"
 dependencies = [
  "cc",
  "chlorine",
@@ -534,7 +541,7 @@ version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22ae881a42852470216c77fba5835b9701815adac24dfaa8d4ebf3a368376756"
 dependencies = [
- "imgui",
+ "imgui 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "winit",
 ]
 
@@ -555,6 +562,12 @@ checksum = "b2b3ea6ff95e175473f8ffe6a7eb7c00d054240321b84c57051175fe3c1e075e"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "itoa"
+version = "0.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b71991ff56294aa922b450139ee08b3bfc70982c6b2c7562771375cf73542dd4"
 
 [[package]]
 name = "jni-sys"
@@ -1073,6 +1086,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ryu"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71d301d4193d031abdd79ff7e3dd721168a9572ef3fe51a1517aba235bd8f86e"
+
+[[package]]
 name = "safe_arch"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1107,6 +1126,31 @@ name = "serde"
 version = "1.0.128"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1056a0db1978e9dbf0f6e4fca677f6f9143dc1c19de346f22cac23e422196834"
+dependencies = [
+ "serde_derive",
+]
+
+[[package]]
+name = "serde_derive"
+version = "1.0.128"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13af2fbb8b60a8950d6c72a56d2095c28870367cc8e10c55e9745bac4995a2c4"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "serde_json"
+version = "1.0.66"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "336b10da19a12ad094b59d870ebde26a45402e5b470add4b5fd03c5048a32127"
+dependencies = [
+ "itoa",
+ "ryu",
+ "serde",
+]
 
 [[package]]
 name = "shared_library"
