@@ -4,4 +4,4 @@ Currently this only displays goals, but there are future plans for extending the
 allow for the ability to perform `hcom`s and the like.
 
 ## Screenshots
-<./screenshots/cube.png>
+![Cube](/screenshots/cube.png)
