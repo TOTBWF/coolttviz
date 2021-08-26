@@ -51,7 +51,7 @@ pub fn init(title: &str) -> System {
             }),
         },
         FontSource::TtfData {
-            data: include_bytes!("../../resources/mplus-1p-regular.ttf"),
+            data: include_bytes!("../resources/mplus-1p-regular.ttf"),
             size_pixels: font_size,
             config: Some(FontConfig {
                 rasterizer_multiply: 1.75,
@@ -75,16 +75,8 @@ pub fn init(title: &str) -> System {
     }
 }
 
-fn imgui_want_event(imgui: &Context, event: &WindowEvent) -> bool {
-    match event {
-        WindowEvent::CursorMoved {..} | WindowEvent::MouseWheel {..} | WindowEvent::MouseInput {..} => imgui.io().want_capture_mouse,
-        WindowEvent::KeyboardInput {..} => imgui.io().want_capture_keyboard,
-        _ => false
-    }
-}
-
 impl System {
-    pub fn main_loop<Draw: FnMut(&mut bool, &mut Frame, &mut Ui) + 'static, Handle: FnMut(&WindowEvent) + 'static>(self, mut run_ui: Draw, mut handle_event: Handle) {
+    pub fn main_loop<Draw: FnMut(&mut bool, &mut Frame, &mut Ui) + 'static>(self, mut run_ui: Draw) {
         let System {
             event_loop,
             display,
@@ -97,7 +89,6 @@ impl System {
 
         event_loop.run(move |event, _, control_flow| {
             let gl_window = display.gl_window();
-            platform.handle_event(imgui.io_mut(), gl_window.window(), &event);
             match event {
             Event::NewEvents(_) => {
                 let now = Instant::now();
@@ -135,10 +126,9 @@ impl System {
                 event: WindowEvent::CloseRequested,
                 ..
             } => *control_flow = ControlFlow::Exit,
-            Event::WindowEvent { event, ..} if !imgui_want_event(&imgui, &event) => {
-                handle_event(&event)
+            event => {
+                platform.handle_event(imgui.io_mut(), gl_window.window(), &event);
             },
-            _ => ()
         }})
     }
 }
