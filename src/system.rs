@@ -76,7 +76,7 @@ pub fn init(title: &str) -> System {
 }
 
 impl System {
-    pub fn main_loop<Draw: FnMut(&mut bool, &mut Frame, &mut Ui) + 'static>(self, mut run_ui: Draw) {
+    pub fn main_loop<Draw: FnMut(&mut bool, &Display, &mut Frame, &mut Ui) + 'static>(self, mut run_ui: Draw) {
         let System {
             event_loop,
             display,
@@ -110,7 +110,7 @@ impl System {
                 let mut target = display.draw();
 
                 target.clear_color_srgb(1.0, 1.0, 1.0, 1.0);
-                run_ui(&mut run, &mut target, &mut ui);
+                run_ui(&mut run, &display, &mut target, &mut ui);
                 if !run {
                     *control_flow = ControlFlow::Exit;
                 }

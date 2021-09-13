@@ -1,3 +1,5 @@
+use nalgebra::Vector3;
+
 fn right_pad_vec<T>(x: &mut Vec<T>, len: usize, pad: T)
 where
     T: Copy,
@@ -7,7 +9,7 @@ where
     }
 }
 
-pub fn project(v : &[f32]) -> [f32; 3] {
+pub fn project(v : &[f32]) -> Vector3<f32> {
     let t : f32 = (45.0_f32.to_radians() / 2.0).tan();
     let mut tmp = vec![0.0; v.len()];
     tmp.copy_from_slice(v);
@@ -20,5 +22,5 @@ pub fn project(v : &[f32]) -> [f32; 3] {
         }
     }
 
-    [tmp[0], tmp[1], tmp[2]]
+    Vector3::new(tmp[0], tmp[1], tmp[2])
 }

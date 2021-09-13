@@ -1,6 +1,7 @@
 use glium::*;
 use imgui::*;
 
+use nalgebra::{Isometry3, Perspective3, Unit};
 use nalgebra::{Point3, Vector3, Vector4, Matrix4};
 
 use crate::system;
@@ -14,6 +15,13 @@ pub struct Vertex {
     pub color: [f32; 3]
 }
 
+// FIXME: There is probably a smarter way of doing this?
+impl Vertex {
+    fn from_vector(v : Vector3<f32>, color: Vector3<f32>) -> Vertex {
+        Vertex { position: [v[0], v[1], v[2]], color: [color[0], color[1], color[2]] }
+    }
+}
+
 implement_vertex!(Vertex, position, color);
 
 pub struct Scene {
@@ -22,56 +30,75 @@ pub struct Scene {
     pub polar: f32,
     pub radius: f32,
 
+    cube: cube::Cube,
+
     // Graphics Data
     program: glium::Program,
     cube_vbo: glium::VertexBuffer<Vertex>,
+    face_vbo: glium::VertexBuffer<Vertex>,
 
     labels: Vec<Label>,
     context: String
 }
 
-fn to_window_coords(mvp: Matrix4<f32>, width: f32, height: f32, v : [f32; 3]) -> [f32; 2] {
-    let pos = mvp * Vector4::new(v[0], v[1], v[2], 1.0);
-    let x_ndc = pos[0] / pos[3];
-    let y_ndc = pos[1] / pos[3];
+// fn to_window_coords(mvp: Matrix4<f32>, width: f32, height: f32, v : Vector3<f32>) -> [f32; 2] {
+//     let pos = mvp * Vector4::new(v[0], v[1], v[2], 1.0);
+//     let x_ndc = pos[0] / pos[3];
+//     let y_ndc = pos[1] / pos[3];
 
-    [
-        ((1.0 + x_ndc) / 2.0) * width,
-        ((1.0 - y_ndc) / 2.0) * height,
+//     [
+//         ((1.0 + x_ndc) / 2.0) * width,
+//         ((1.0 - y_ndc) / 2.0) * height,
+//     ]
+// }
+
+// fn from_window_coords(mvp: Matrix4<f32>, width: f32, height: f32, w: [f32; 2]) -> Vector3<f32> {
+//     let transform = ()
+// }
+
+fn face_geometry(face: &cube::Face, color: Vector3<f32>) -> Vec<Vertex> {
+    vec![
+        Vertex::from_vector(face.points[0], color),
+        Vertex::from_vector(face.points[1], color),
+        Vertex::from_vector(face.points[2], color),
+        Vertex::from_vector(face.points[3], color),
+        Vertex::from_vector(face.points[0], color),
+        Vertex::from_vector(face.points[2], color),
+        Vertex::from_vector(face.points[1], color),
+        Vertex::from_vector(face.points[3], color),
     ]
 }
 
-fn hypercube_geometry(dim: u32, size: f32) -> Vec<Vertex> {
-    let vertices = cube::hypercube(dim, size);
-    vertices.iter()
-        .map(|v| Vertex { position: *v, color: [0.0, 0.0, 0.0] })
-        .collect()
+fn hypercube_geometry(cube: &cube::Cube) -> Vec<Vertex> {
+    // FIXME: This is really not efficient!
+    // We should probably use a mode that isn't GL_LINES here?
+    cube.faces.iter().flat_map(|v| face_geometry(v, Vector3::new(0.0, 0.0, 0.0))).collect()
 }
 
 
 fn render_label(ui: &Ui, mvp: Matrix4<f32>, lbl: &Label) {
     let [width, height] = ui.io().display_size;
     let projected = linalg::project(&lbl.position);
-    let window_pos = to_window_coords(mvp, width, height, projected);
+    // let window_pos = to_window_coords(mvp, width, height, projected);
 
-    let title =
-        if lbl.txt.len() > 10 {
-            format!("{}...##{}\0", lbl.txt[0..9 - 3].to_owned(), lbl.txt)
-        } else {
-            format!("{}##{}\0", lbl.txt, lbl.txt)
-        };
+    // let title =
+    //     if lbl.txt.len() > 10 {
+    //         format!("{}...##{}\0", lbl.txt[0..9 - 3].to_owned(), lbl.txt)
+    //     } else {
+    //         format!("{}##{}\0", lbl.txt, lbl.txt)
+    //     };
 
 
 
-    let title_imstr = unsafe { ImStr::from_utf8_with_nul_unchecked(title.as_bytes()) };
-    // let lbl_imstr = unsafe { ImStr::from_utf8_with_nul_unchecked(lbl.as_bytes()) };
-    Window::new(title_imstr)
-        .position(window_pos, Condition::Always)
-        .size([100.0, 100.0], Condition::Appearing)
-        .collapsed(true, Condition::Appearing)
-        .build(ui, || {
-            ui.text(format!("{}\0", lbl.txt));
-        });
+    // let title_imstr = unsafe { ImStr::from_utf8_with_nul_unchecked(title.as_bytes()) };
+    // // let lbl_imstr = unsafe { ImStr::from_utf8_with_nul_unchecked(lbl.as_bytes()) };
+    // Window::new(title_imstr)
+    //     .position(window_pos, Condition::Always)
+    //     .size([100.0, 100.0], Condition::Appearing)
+    //     .collapsed(true, Condition::Appearing)
+    //     .build(ui, || {
+    //         ui.text(format!("{}\0", lbl.txt));
+    //     });
 }
 
 fn init_scene(display: &glium::Display, DisplayGoal { dim, labels, context }: DisplayGoal) -> Scene {
@@ -85,21 +112,25 @@ fn init_scene(display: &glium::Display, DisplayGoal { dim, labels, context }: Di
         fragment: include_str!("../resources/shader.frag")
     }).unwrap();
 
-    let cube_geometry = hypercube_geometry(dim, 1.0);
+    let cube = cube::Cube::new(dim, 1.0);
+    let cube_geometry = hypercube_geometry(&cube);
     let cube_vbo = glium::VertexBuffer::dynamic(display, &cube_geometry).unwrap();
+    let face_vbo = glium::VertexBuffer::empty_dynamic(display, 8).unwrap();
 
     Scene {
         azimuth,
         polar,
         radius,
         program,
+        cube,
         cube_vbo,
+        face_vbo,
         labels,
         context
     }
 }
 
-fn render_frame(ui: &Ui, scene : &Scene, target: &mut Frame) {
+fn render_frame(ui: &Ui, scene : &Scene, display : &Display, target: &mut Frame) {
     let model : Matrix4<f32> = Matrix4::identity();
     let [width, height] = ui.io().display_size;
 
@@ -110,17 +141,17 @@ fn render_frame(ui: &Ui, scene : &Scene, target: &mut Frame) {
     );
     let origin : Point3<f32> = Point3::new(0.0, 0.0, 0.0);
     let up : Vector3<f32> = Vector3::new(0.0, 1.0, 0.0);
-    let view = Matrix4::look_at_rh(&eye, &origin, &up);
+    let view = Isometry3::look_at_rh(&eye, &origin, &up);
 
     let aspect = width / height;
     let fov = 45.0_f32.to_radians();
-    let projection = Matrix4::new_perspective(aspect, fov, 0.1, 100.0);
+    let projection = Perspective3::new(aspect, fov, 0.1, 100.0);
 
-    let mvp = projection * view * model;
+    let mvp = projection.to_homogeneous() * view.to_homogeneous() * model;
 
     let model_unif : [[f32; 4]; 4] = model.into();
-    let view_unif : [[f32; 4]; 4] = view.into();
-    let projection_unif : [[f32; 4]; 4] = projection.into();
+    let view_unif : [[f32; 4]; 4] = view.to_homogeneous().into();
+    let projection_unif : [[f32; 4]; 4] = projection.to_homogeneous().into();
 
     let uniforms = uniform! {
         model: model_unif,
@@ -140,13 +171,35 @@ fn render_frame(ui: &Ui, scene : &Scene, target: &mut Frame) {
     for lbl in &scene.labels {
         render_label(ui, mvp, lbl);
     }
+
+    let [width, height] = ui.io().display_size;
+    let [mouse_x, mouse_y] = ui.io().mouse_pos;
+    let mouse_ndc_point = Point3::new(-1.0 + 2.0 * (mouse_x / width), 1.0 - 2.0 * (mouse_y / height),  1.0);
+    let mouse_view_point = view.inverse() * projection.unproject_point(&mouse_ndc_point);
+    let direction = Unit::new_normalize(eye - mouse_view_point);
+    // println!("Eye: {:?}\nDirection: {:?}", eye , direction);
+    let closest = scene.cube.intersect(eye, *direction);
+    let ray_geom = [
+        Vertex::from_vector(eye.coords + -1.0 * direction.into_inner(), Vector3::new(0.0, 0.0, 1.0)),
+        Vertex::from_vector(Vector3::new(0.0, 0.0, 0.0), Vector3::new(0.0, 0.0, 1.0)),
+    ];
+    let ray_vbo : glium::VertexBuffer<Vertex> = glium::VertexBuffer::immutable(display, &ray_geom).unwrap();
+    target.draw(&ray_vbo, &glium::index::NoIndices(glium::index::PrimitiveType::LinesList), &scene.program, &uniforms, &draw_params).unwrap();
+    if let Some(face) = closest {
+        scene.face_vbo.write(&face_geometry(&face, Vector3::new(1.0, 0.0, 0.0)));
+        target.draw(&scene.face_vbo, &glium::index::NoIndices(glium::index::PrimitiveType::LinesList), &scene.program, &uniforms, &draw_params).unwrap()
+    };
+
+    // Window::new(im_str!("Debug")).build(ui, || {
+    //     ui.text(format!("{:?} \0", closest))
+    // });
 }
 
 pub fn display_goal(msg : DisplayGoal) {
     let system = system::init(file!());
 
     let mut scene = init_scene(&system.display, msg);
-    system.main_loop(move |_, target, ui| {
+    system.main_loop(move |_, display, target, ui| {
         let io = ui.io();
         if !io.want_capture_mouse {
             let [delta_x, delta_y] = io.mouse_delta;
@@ -157,6 +210,26 @@ pub fn display_goal(msg : DisplayGoal) {
             scene.radius += 0.1_f32 * io.mouse_wheel;
         }
 
-        render_frame(ui, &scene, target);
+        render_frame(ui, &scene, display, target);
+    })
+}
+
+pub fn display_hypercube(dim : u32) {
+    let system = system::init(file!());
+
+    let ctx = "render test\0";
+    let mut scene = init_scene(&system.display, DisplayGoal { dim, labels: vec![], context: ctx.to_string() });
+    system.main_loop(move |_, display, target, ui| {
+        let io = ui.io();
+        if !io.want_capture_mouse {
+            let [delta_x, delta_y] = io.mouse_delta;
+            if ui.is_mouse_down(MouseButton::Left) {
+                scene.azimuth += delta_x / 300.0;
+                scene.polar += delta_y / 300.0;
+            }
+            scene.radius += 0.1_f32 * io.mouse_wheel;
+        }
+
+        render_frame(ui, &scene, display, target);
     })
 }
