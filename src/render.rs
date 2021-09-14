@@ -188,9 +188,10 @@ fn render_frame(ui: &Ui, scene : &Scene, display : &Display, target: &mut Frame)
     };
 
     Window::new(im_str!("Debug")).build(ui, || {
+        ui.text(format!("Camera Position: {} {} {}", eye[0], eye[1], eye[2]));
         if CollapsingHeader::new(im_str!("Intersections")).default_open(true).build(ui) {
             for (isect, _) in isects {
-                ui.text(format!("{} {} {}\0", isect[0], isect[1], isect[2]))
+                ui.text(format!("{} {} {}", isect[0], isect[1], isect[2]))
             }
         }
         ui.spacing();

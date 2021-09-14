@@ -21,7 +21,6 @@ fn point(bits: u32, dim: u32, size: f32) -> Vec<f32> {
         } else {
             size
         };
-        println!("Inserting {} at {} due to {}...", b, i, bits);
         v[i as usize] = b;
     }
     v
@@ -38,7 +37,6 @@ impl Face {
         (v1 - v0).cross(&(q.coords - v0)).dot(n) >= 0.0
     }
 
-    // FIXME: I need to check that the intersection does not happen _behind_ me!
     pub fn intersect(&self, origin: Point3<f32>, dir: Vector3<f32>) -> Option<Point3<f32>> {
         // Compute the intersection point on the supporting plane of the face.
         let dist = (self.points[0] - origin.coords).dot(&self.normal);
@@ -46,10 +44,12 @@ impl Face {
         let t = dist/angle;
         let isect = origin + t*dir;
         // We just generalize the standard inside-out test for a triangle here.
+        // We also check that t < 0 to ensure that we ignore any intersections that occur behind us.
         if Face::inside_out(&self.points[0], &self.points[1], &isect, &self.normal)
             && Face::inside_out(&self.points[1], &self.points[3], &isect, &self.normal)
             && Face::inside_out(&self.points[3], &self.points[2], &isect, &self.normal)
-            && Face::inside_out(&self.points[2], &self.points[0], &isect, &self.normal) {
+            && Face::inside_out(&self.points[2], &self.points[0], &isect, &self.normal)
+            && t < 0.0 {
             Some(isect)
         } else {
             None
