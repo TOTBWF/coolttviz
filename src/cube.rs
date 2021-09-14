@@ -1,4 +1,5 @@
 use nalgebra::{Point3, Vector3};
+use ordered_float::NotNan;
 
 use crate::linalg;
 
@@ -20,6 +21,7 @@ fn point(bits: u32, dim: u32, size: f32) -> Vec<f32> {
         } else {
             size
         };
+        println!("Inserting {} at {} due to {}...", b, i, bits);
         v[i as usize] = b;
     }
     v
@@ -48,7 +50,6 @@ impl Face {
             && Face::inside_out(&self.points[1], &self.points[3], &isect, &self.normal)
             && Face::inside_out(&self.points[3], &self.points[2], &isect, &self.normal)
             && Face::inside_out(&self.points[2], &self.points[0], &isect, &self.normal) {
-                println!("T: {}", t);
             Some(isect)
         } else {
             None
@@ -82,7 +83,7 @@ impl Cube {
                 // realizing that an integer 'c < 2 ^ n' can represent a vertex on an
                 // n-cube by manner of it's binary representation.
                 for loc in 0..2_u32.pow(dim - 2) {
-                    let mut v = point(insert_bit(insert_bit(loc, d1), d0), dim, size);
+                    let mut v = point(insert_bit(insert_bit(loc, d0), d1), dim, size);
 
                     v[d0 as usize] = -size;
                     v[d1 as usize] = -size;
@@ -105,13 +106,7 @@ impl Cube {
                     let horiz = bottom_right - bottom_left;
                     let vert = top_left - bottom_left;
                     let normal = horiz.cross(&vert);
-                    // FIXME: The direction of the normals is messed up here...
-                    // The normals direction here is messed up!
-                    println!("{}", normal);
 
-                    // When we do our projection, if we have a 2d vector then
-                    // we set the z-coordinate to 0. This causes the normal vectors to be
-                    // messed up, so let's tweak that real quick.
                     faces.push(Face { points, normal })
                 }
             }
@@ -119,21 +114,12 @@ impl Cube {
         Cube { faces }
     }
 
-    pub fn intersect(&self, origin: Point3<f32>, dir : Vector3<f32>) -> Option<Face> {
-        let mut closest_face = None;
-        let mut closest_dist = None;
-
-        // println!("--------------------------------------");
-        for &face in &self.faces {
-            if let Some(isect) = face.intersect(origin, dir) {
-                let dist = (origin - isect).norm();
-                // println!("Intersection: {:?} {:?} {:?}", dist, closest_dist, closest_dist < Some(dist));
-                if closest_dist < Some(dist) {
-                    closest_face = Some(face);
-                    closest_dist = Some(dist);
-                }
-            }
-        }
-        closest_face
+    pub fn intersections(&self, origin: Point3<f32>, dir : Vector3<f32>) -> Vec<(Point3<f32>, &Face)> {
+        let mut isects : Vec<(Point3<f32>, &Face)> =
+        self.faces.iter().filter_map(|face| {
+            face.intersect(origin, dir).map(|isect| (isect, face))
+        }).collect();
+        isects.sort_by_key(|(isect, _)| NotNan::new((origin - isect).norm()).expect("Distance should not be NaN"));
+        isects
     }
 }

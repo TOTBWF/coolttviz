@@ -177,22 +177,24 @@ fn render_frame(ui: &Ui, scene : &Scene, display : &Display, target: &mut Frame)
     let mouse_ndc_point = Point3::new(-1.0 + 2.0 * (mouse_x / width), 1.0 - 2.0 * (mouse_y / height),  1.0);
     let mouse_view_point = view.inverse() * projection.unproject_point(&mouse_ndc_point);
     let direction = Unit::new_normalize(eye - mouse_view_point);
-    // println!("Eye: {:?}\nDirection: {:?}", eye , direction);
-    let closest = scene.cube.intersect(eye, *direction);
-    let ray_geom = [
-        Vertex::from_vector(eye.coords + -1.0 * direction.into_inner(), Vector3::new(0.0, 0.0, 1.0)),
-        Vertex::from_vector(Vector3::new(0.0, 0.0, 0.0), Vector3::new(0.0, 0.0, 1.0)),
-    ];
-    let ray_vbo : glium::VertexBuffer<Vertex> = glium::VertexBuffer::immutable(display, &ray_geom).unwrap();
-    target.draw(&ray_vbo, &glium::index::NoIndices(glium::index::PrimitiveType::LinesList), &scene.program, &uniforms, &draw_params).unwrap();
-    if let Some(face) = closest {
-        scene.face_vbo.write(&face_geometry(&face, Vector3::new(1.0, 0.0, 0.0)));
-        target.draw(&scene.face_vbo, &glium::index::NoIndices(glium::index::PrimitiveType::LinesList), &scene.program, &uniforms, &draw_params).unwrap()
+    let isects = scene.cube.intersections(eye, *direction);
+    if let Some(&(_, face)) = isects.first() {
+        scene.face_vbo.write(&face_geometry(face, Vector3::new(1.0, 0.0, 0.0)));
+        target.draw(&scene.face_vbo, &glium::index::NoIndices(glium::index::PrimitiveType::LinesList), &scene.program, &uniforms, &draw_params).unwrap();
+
+        ui.tooltip(|| {
+            ui.text(im_str!("tooltip"));
+        });
     };
 
-    // Window::new(im_str!("Debug")).build(ui, || {
-    //     ui.text(format!("{:?} \0", closest))
-    // });
+    Window::new(im_str!("Debug")).build(ui, || {
+        if CollapsingHeader::new(im_str!("Intersections")).default_open(true).build(ui) {
+            for (isect, _) in isects {
+                ui.text(format!("{} {} {}\0", isect[0], isect[1], isect[2]))
+            }
+        }
+        ui.spacing();
+    });
 }
 
 pub fn display_goal(msg : DisplayGoal) {
