@@ -7,6 +7,7 @@ use nalgebra::{Point3, Vector3, Vector4, Matrix4};
 use crate::system;
 use crate::linalg;
 use crate::cube;
+use crate::camera;
 use crate::messages::{DisplayGoal, Label};
 
 #[derive(Copy, Clone, Debug)]
@@ -25,10 +26,7 @@ impl Vertex {
 implement_vertex!(Vertex, position, color);
 
 pub struct Scene {
-    // Camera Controls
-    pub azimuth: f32,
-    pub polar: f32,
-    pub radius: f32,
+    camera: camera::Camera,
 
     cube: cube::Cube,
 
@@ -107,10 +105,7 @@ fn render_label(ui: &Ui, mvp: Matrix4<f32>, lbl: &Label) {
 }
 
 fn init_scene(display: &glium::Display, DisplayGoal { dim, labels, context }: DisplayGoal) -> Scene {
-    let azimuth = 90.0_f32.to_radians();
-    let polar = 0.0;
-    let radius = 4.0;
-
+    let camera = camera::Camera::new();
 
     let program = program!(display, 140 => {
         vertex: include_str!("../resources/shader.vert"),
@@ -123,9 +118,7 @@ fn init_scene(display: &glium::Display, DisplayGoal { dim, labels, context }: Di
     let face_vbo = glium::VertexBuffer::empty_dynamic(display, 8).unwrap();
 
     Scene {
-        azimuth,
-        polar,
-        radius,
+        camera,
         program,
         cube,
         cube_vbo,
@@ -142,14 +135,8 @@ fn init_scene(display: &glium::Display, DisplayGoal { dim, labels, context }: Di
 fn render_frame(ui: &Ui, scene : &mut Scene, display : &Display, target: &mut Frame) {
     let [width, height] = ui.io().display_size;
 
-    let eye : Point3<f32> = Point3::new(
-        scene.radius * scene.polar.cos() * scene.azimuth.cos(),
-        scene.radius * scene.polar.sin(),
-        scene.radius * scene.polar.cos() * scene.azimuth.sin(),
-    );
-    let origin : Point3<f32> = Point3::new(0.0, 0.0, 0.0);
-    let up : Vector3<f32> = Vector3::new(0.0, 1.0, 0.0);
-    let view = Isometry3::look_at_rh(&eye, &origin, &up);
+    let eye = scene.camera.eye();
+    let view = scene.camera.view();
 
     let aspect = width / height;
     let fov = 45.0_f32.to_radians();
@@ -249,12 +236,11 @@ fn handle_input(ui: &Ui, scene: &mut Scene) {
     if !io.want_capture_mouse {
         let [delta_x, delta_y] = io.mouse_delta;
         if ui.is_mouse_down(MouseButton::Left) {
-            scene.azimuth += delta_x / 300.0;
-            scene.polar += delta_y / 300.0;
+            scene.camera.rotate_azimuth(delta_x / 300.0);
+            scene.camera.rotate_polar(delta_y / 300.0);
         }
-        scene.radius += 0.1_f32 * io.mouse_wheel;
+        scene.camera.zoom(0.1_f32 * io.mouse_wheel);
     }
-
 }
 
 pub fn display_goal(msg : DisplayGoal) {

@@ -4,6 +4,7 @@ mod render;
 mod system;
 mod messages;
 mod server;
+mod camera;
 
 use messages::Message;
 
