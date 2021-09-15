@@ -37,8 +37,13 @@ pub struct Scene {
     cube_vbo: glium::VertexBuffer<Vertex>,
     face_vbo: glium::VertexBuffer<Vertex>,
 
+    dim: u32,
     labels: Vec<Label>,
-    context: String
+    context: String,
+
+    show_debug: bool,
+    show_context: bool,
+    debug_render: bool,
 }
 
 // fn to_window_coords(mvp: Matrix4<f32>, width: f32, height: f32, v : Vector3<f32>) -> [f32; 2] {
@@ -125,12 +130,16 @@ fn init_scene(display: &glium::Display, DisplayGoal { dim, labels, context }: Di
         cube,
         cube_vbo,
         face_vbo,
+        dim,
         labels,
-        context
+        context,
+        show_debug: false,
+        show_context: true,
+        debug_render: false,
     }
 }
 
-fn render_frame(ui: &Ui, scene : &Scene, display : &Display, target: &mut Frame) {
+fn render_frame(ui: &Ui, scene : &mut Scene, display : &Display, target: &mut Frame) {
     let model : Matrix4<f32> = Matrix4::identity();
     let [width, height] = ui.io().display_size;
 
@@ -163,10 +172,6 @@ fn render_frame(ui: &Ui, scene : &Scene, display : &Display, target: &mut Frame)
 
     target.draw(&scene.cube_vbo, &glium::index::NoIndices(glium::index::PrimitiveType::LinesList), &scene.program, &uniforms, &draw_params).unwrap();
 
-    let ctx = unsafe { ImStr::from_utf8_with_nul_unchecked(scene.context.as_bytes()) };
-    Window::new(im_str!("Context")).build(ui, || {
-        ui.text_wrapped(ctx)
-    });
 
     for lbl in &scene.labels {
         render_label(ui, mvp, lbl);
@@ -187,15 +192,72 @@ fn render_frame(ui: &Ui, scene : &Scene, display : &Display, target: &mut Frame)
         });
     };
 
-    Window::new(im_str!("Debug")).build(ui, || {
-        ui.text(format!("Camera Position: {} {} {}", eye[0], eye[1], eye[2]));
-        if CollapsingHeader::new(im_str!("Intersections")).default_open(true).build(ui) {
-            for (isect, _) in isects {
-                ui.text(format!("{} {} {}", isect[0], isect[1], isect[2]))
-            }
-        }
-        ui.spacing();
+    // We don't want to have to mutably borrow these fields,
+    // as that would prevent us from having any other references
+    // to parts of scene, so we just make copies here and then update the
+    // scene at the end of the frame.
+    let mut show_debug = scene.show_debug;
+    let mut show_context = scene.show_context;
+    let mut debug_render = scene.debug_render;
+    let mut dim = scene.dim;
+    let mut new_cube = None;
+
+    ui.main_menu_bar(|| {
+        ui.menu(im_str!("Menu"), || {
+            ui.checkbox(im_str!("Show Context"), &mut show_context);
+            ui.checkbox(im_str!("Debug Panel"), &mut show_debug);
+        });
     });
+
+    if scene.show_debug {
+        Window::new(im_str!("Debug")).build(ui, || {
+            ui.text(format!("Camera Position: {} {} {}", eye[0], eye[1], eye[2]));
+            if CollapsingHeader::new(im_str!("Intersections")).default_open(true).build(ui) {
+                for (isect, _) in isects {
+                    ui.text(format!("{} {} {}", isect[0], isect[1], isect[2]))
+                }
+            }
+            ui.spacing();
+            if CollapsingHeader::new(im_str!("Rendering")).default_open(true).build(ui) {
+                ui.checkbox(im_str!("Debug Render Mode"), &mut debug_render);
+                if debug_render && Slider::new(im_str!("Dimension")).range(2..=5).build(ui, &mut dim) {
+                    let cube = cube::Cube::new(dim, 1.0);
+                    let cube_geometry = hypercube_geometry(&cube);
+                    new_cube = Some((cube, glium::VertexBuffer::dynamic(display, &cube_geometry).unwrap()));
+                }
+            }
+            ui.spacing();
+        });
+    }
+
+    if scene.show_context {
+        let ctx = unsafe { ImStr::from_utf8_with_nul_unchecked(scene.context.as_bytes()) };
+        Window::new(im_str!("Context")).build(ui, || {
+            ui.text_wrapped(ctx)
+        });
+    }
+
+    scene.show_context = show_context;
+    scene.show_debug = show_debug;
+    scene.debug_render = debug_render;
+    scene.dim = dim;
+    if let Some((cube, cube_vbo)) = new_cube {
+        scene.cube = cube;
+        scene.cube_vbo = cube_vbo;
+    }
+}
+
+fn handle_input(ui: &Ui, scene: &mut Scene) {
+    let io = ui.io();
+    if !io.want_capture_mouse {
+        let [delta_x, delta_y] = io.mouse_delta;
+        if ui.is_mouse_down(MouseButton::Left) {
+            scene.azimuth += delta_x / 300.0;
+            scene.polar += delta_y / 300.0;
+        }
+        scene.radius += 0.1_f32 * io.mouse_wheel;
+    }
+
 }
 
 pub fn display_goal(msg : DisplayGoal) {
@@ -203,17 +265,8 @@ pub fn display_goal(msg : DisplayGoal) {
 
     let mut scene = init_scene(&system.display, msg);
     system.main_loop(move |_, display, target, ui| {
-        let io = ui.io();
-        if !io.want_capture_mouse {
-            let [delta_x, delta_y] = io.mouse_delta;
-            if ui.is_mouse_down(MouseButton::Left) {
-                scene.azimuth += delta_x / 300.0;
-                scene.polar += delta_y / 300.0;
-            }
-            scene.radius += 0.1_f32 * io.mouse_wheel;
-        }
-
-        render_frame(ui, &scene, display, target);
+        handle_input(ui, &mut scene);
+        render_frame(ui, &mut scene, display, target);
     })
 }
 
@@ -223,16 +276,7 @@ pub fn display_hypercube(dim : u32) {
     let ctx = "render test\0";
     let mut scene = init_scene(&system.display, DisplayGoal { dim, labels: vec![], context: ctx.to_string() });
     system.main_loop(move |_, display, target, ui| {
-        let io = ui.io();
-        if !io.want_capture_mouse {
-            let [delta_x, delta_y] = io.mouse_delta;
-            if ui.is_mouse_down(MouseButton::Left) {
-                scene.azimuth += delta_x / 300.0;
-                scene.polar += delta_y / 300.0;
-            }
-            scene.radius += 0.1_f32 * io.mouse_wheel;
-        }
-
-        render_frame(ui, &scene, display, target);
+        handle_input(ui, &mut scene);
+        render_frame(ui, &mut scene, display, target);
     })
 }
