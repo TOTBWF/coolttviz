@@ -1,4 +1,4 @@
-use nalgebra::{Point3, Vector3};
+use nalgebra::{Point3, Vector3, Similarity3};
 use ordered_float::NotNan;
 
 use crate::linalg;
@@ -58,7 +58,8 @@ impl Face {
 }
 
 pub struct Cube {
-    pub faces: Vec<Face>
+    pub faces: Vec<Face>,
+    pub model: Similarity3<f32>
 }
 
 impl Cube {
@@ -111,7 +112,7 @@ impl Cube {
                 }
             }
         }
-        Cube { faces }
+        Cube { faces, model: Similarity3::identity() }
     }
 
     pub fn intersections(&self, origin: Point3<f32>, dir : Vector3<f32>) -> Vec<(Point3<f32>, &Face)> {
