@@ -1,7 +1,7 @@
 use glium::*;
 use imgui::*;
 
-use nalgebra::{Isometry3, Perspective3, Unit};
+use nalgebra::{Perspective3, Unit};
 use nalgebra::{Point3, Vector3, Vector4, Matrix4};
 
 use crate::system;
@@ -13,13 +13,13 @@ use crate::messages::{DisplayGoal, Label};
 #[derive(Copy, Clone, Debug)]
 pub struct Vertex {
     pub position: [f32; 3],
-    pub color: [f32; 3]
+    pub color: [f32; 4]
 }
 
 // FIXME: There is probably a smarter way of doing this?
 impl Vertex {
-    fn from_vector(v : Vector3<f32>, color: Vector3<f32>) -> Vertex {
-        Vertex { position: [v[0], v[1], v[2]], color: [color[0], color[1], color[2]] }
+    fn from_vector(v : Vector3<f32>, color: [f32; 4]) -> Vertex {
+        Vertex { position: [v[0], v[1], v[2]], color }
     }
 }
 
@@ -35,13 +35,14 @@ pub struct Scene {
     cube_vbo: glium::VertexBuffer<Vertex>,
     face_vbo: glium::VertexBuffer<Vertex>,
 
-    dim: u32,
+    dims: Vec<String>,
     labels: Vec<Label>,
     context: String,
 
     show_debug: bool,
     show_context: bool,
-    debug_render: bool,
+    highlight_color: [f32; 4],
+    dark_mode: bool
 }
 
 fn to_window_coords(mvp: Matrix4<f32>, width: f32, height: f32, v : Vector3<f32>) -> [f32; 2] {
@@ -59,7 +60,7 @@ fn to_window_coords(mvp: Matrix4<f32>, width: f32, height: f32, v : Vector3<f32>
 //     let transform = ()
 // }
 
-fn face_geometry(face: &cube::Face, color: Vector3<f32>) -> Vec<Vertex> {
+fn face_geometry(face: &cube::Face, color: [f32; 4]) -> Vec<Vertex> {
     vec![
         Vertex::from_vector(face.points[0], color),
         Vertex::from_vector(face.points[1], color),
@@ -75,7 +76,7 @@ fn face_geometry(face: &cube::Face, color: Vector3<f32>) -> Vec<Vertex> {
 fn hypercube_geometry(cube: &cube::Cube) -> Vec<Vertex> {
     // FIXME: This is really not efficient!
     // We should probably use a mode that isn't GL_LINES here?
-    cube.faces.iter().flat_map(|v| face_geometry(v, Vector3::new(0.0, 0.0, 0.0))).collect()
+    cube.faces.iter().flat_map(|v| face_geometry(v, [0.0, 0.0, 0.0, 1.0])).collect()
 }
 
 
@@ -104,7 +105,7 @@ fn render_label(ui: &Ui, mvp: Matrix4<f32>, lbl: &Label) {
         });
 }
 
-fn init_scene(display: &glium::Display, DisplayGoal { dim, labels, context }: DisplayGoal) -> Scene {
+fn init_scene(display: &glium::Display, DisplayGoal { dims, labels, context }: DisplayGoal) -> Scene {
     let camera = camera::Camera::new();
 
     let program = program!(display, 140 => {
@@ -112,7 +113,7 @@ fn init_scene(display: &glium::Display, DisplayGoal { dim, labels, context }: Di
         fragment: include_str!("../resources/shader.frag")
     }).unwrap();
 
-    let cube = cube::Cube::new(dim, 1.0);
+    let cube = cube::Cube::new(&dims, 1.0);
     let cube_geometry = hypercube_geometry(&cube);
     let cube_vbo = glium::VertexBuffer::dynamic(display, &cube_geometry).unwrap();
     let face_vbo = glium::VertexBuffer::empty_dynamic(display, 8).unwrap();
@@ -123,16 +124,17 @@ fn init_scene(display: &glium::Display, DisplayGoal { dim, labels, context }: Di
         cube,
         cube_vbo,
         face_vbo,
-        dim,
+        dims,
         labels,
         context,
         show_debug: false,
         show_context: true,
-        debug_render: false,
+        highlight_color: [1.0, 0.0, 0.0, 1.0],
+        dark_mode: false
     }
 }
 
-fn render_frame(ui: &Ui, scene : &mut Scene, display : &Display, target: &mut Frame) {
+fn render_frame(ui: &Ui, scene : &mut Scene, target: &mut Frame) {
     let [width, height] = ui.io().display_size;
 
     let eye = scene.camera.eye();
@@ -154,6 +156,12 @@ fn render_frame(ui: &Ui, scene : &mut Scene, display : &Display, target: &mut Fr
         projection: projection_unif
     };
 
+    if scene.dark_mode {
+        target.clear_color(0.1, 0.1, 0.1, 1.0);
+    } else {
+        target.clear_color(1.0, 1.0, 1.0, 1.0);
+    }
+
     let draw_params = Default::default();
     target.draw(&scene.cube_vbo, &glium::index::NoIndices(glium::index::PrimitiveType::LinesList), &scene.program, &uniforms, &draw_params).unwrap();
 
@@ -168,11 +176,15 @@ fn render_frame(ui: &Ui, scene : &mut Scene, display : &Display, target: &mut Fr
     let direction = Unit::new_normalize(eye - mouse_view_point);
     let isects = scene.cube.intersections(eye, *direction);
     if let Some(&(_, face)) = isects.first() {
-        scene.face_vbo.write(&face_geometry(face, Vector3::new(1.0, 0.0, 0.0)));
+        scene.face_vbo.write(&face_geometry(face, scene.highlight_color));
         target.draw(&scene.face_vbo, &glium::index::NoIndices(glium::index::PrimitiveType::LinesList), &scene.program, &uniforms, &draw_params).unwrap();
 
         ui.tooltip(|| {
-            ui.text(im_str!("tooltip"));
+            let mut s = String::new();
+            for (nm, d) in &face.dims {
+                s.push_str(&format!("{} = {}\n", nm, if *d { 1 } else { 0 }));
+            }
+            ui.text(s);
         });
     };
 
@@ -182,9 +194,8 @@ fn render_frame(ui: &Ui, scene : &mut Scene, display : &Display, target: &mut Fr
     // scene at the end of the frame.
     let mut show_debug = scene.show_debug;
     let mut show_context = scene.show_context;
-    let mut debug_render = scene.debug_render;
-    let mut dim = scene.dim;
-    let mut new_cube = None;
+    let mut highlight_color = scene.highlight_color;
+    let mut dark_mode = scene.dark_mode;
 
     ui.main_menu_bar(|| {
         ui.menu(im_str!("Menu"), || {
@@ -196,21 +207,14 @@ fn render_frame(ui: &Ui, scene : &mut Scene, display : &Display, target: &mut Fr
     if scene.show_debug {
         Window::new(im_str!("Debug")).build(ui, || {
             ui.text(format!("Camera Position: {} {} {}", eye[0], eye[1], eye[2]));
-            if CollapsingHeader::new(im_str!("Intersections")).default_open(true).build(ui) {
+            if CollapsingHeader::new(im_str!("Intersections")).default_open(false).build(ui) {
                 for (isect, _) in isects {
                     ui.text(format!("{} {} {}", isect[0], isect[1], isect[2]))
                 }
             }
             ui.spacing();
-            if CollapsingHeader::new(im_str!("Rendering")).default_open(true).build(ui) {
-                ui.checkbox(im_str!("Debug Render Mode"), &mut debug_render);
-                if debug_render && Slider::new(im_str!("Dimension")).range(2..=5).build(ui, &mut dim) {
-                    let cube = cube::Cube::new(dim, 1.0);
-                    let cube_geometry = hypercube_geometry(&cube);
-                    new_cube = Some((cube, glium::VertexBuffer::dynamic(display, &cube_geometry).unwrap()));
-                }
-            }
-            ui.spacing();
+            ColorPicker::new(im_str!("Highlight Color"), &mut highlight_color).build(ui);
+            ui.checkbox(im_str!("Dark Mode"), &mut dark_mode);
         });
     }
 
@@ -223,12 +227,8 @@ fn render_frame(ui: &Ui, scene : &mut Scene, display : &Display, target: &mut Fr
 
     scene.show_context = show_context;
     scene.show_debug = show_debug;
-    scene.debug_render = debug_render;
-    scene.dim = dim;
-    if let Some((cube, cube_vbo)) = new_cube {
-        scene.cube = cube;
-        scene.cube_vbo = cube_vbo;
-    }
+    scene.dark_mode = dark_mode;
+    scene.highlight_color = highlight_color;
 }
 
 fn handle_input(ui: &Ui, scene: &mut Scene) {
@@ -249,17 +249,17 @@ pub fn display_goal(msg : DisplayGoal) {
     let mut scene = init_scene(&system.display, msg);
     system.main_loop(move |_, display, target, ui| {
         handle_input(ui, &mut scene);
-        render_frame(ui, &mut scene, display, target);
+        render_frame(ui, &mut scene, target);
     })
 }
 
-pub fn display_hypercube(dim : u32) {
+pub fn display_hypercube(dims : Vec<String>) {
     let system = system::init(file!());
 
     let ctx = "render test\0";
-    let mut scene = init_scene(&system.display, DisplayGoal { dim, labels: vec![], context: ctx.to_string() });
+    let mut scene = init_scene(&system.display, DisplayGoal { dims, labels: vec![], context: ctx.to_string() });
     system.main_loop(move |_, display, target, ui| {
         handle_input(ui, &mut scene);
-        render_frame(ui, &mut scene, display, target);
+        render_frame(ui, &mut scene, target);
     })
 }

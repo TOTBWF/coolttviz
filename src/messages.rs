@@ -8,7 +8,7 @@ pub struct Label {
 
 #[derive(Debug, Deserialize)]
 pub struct DisplayGoal {
-    pub dim: u32,
+    pub dims: Vec<String>,
     pub labels: Vec<Label>,
     pub context: String
 }

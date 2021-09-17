@@ -26,10 +26,22 @@ fn point(bits: u32, dim: u32, size: f32) -> Vec<f32> {
     v
 }
 
-#[derive(Copy, Clone, Debug)]
+fn dims_from_point(dim_names: &[String], point: &[f32], d0: u32, d1: u32) -> Vec<(String, bool)> {
+    let mut dims = Vec::new();
+    for i in 0..dim_names.len() {
+        let d = point[i] > 0.0;
+        if (i as u32) != d0 && (i as u32) != d1 {
+            dims.push((dim_names[i].clone(), d));
+        }
+    }
+    dims
+}
+
+#[derive(Clone, Debug)]
 pub struct Face {
     pub points: [Vector3<f32>; 4],
-    pub normal: Vector3<f32>
+    pub normal: Vector3<f32>,
+    pub dims: Vec<(String, bool)>
 }
 
 impl Face {
@@ -63,7 +75,8 @@ pub struct Cube {
 }
 
 impl Cube {
-    pub fn new(dim: u32, size: f32) -> Cube {
+    pub fn new(dim_names: &[String], size: f32) -> Cube {
+        let dim = dim_names.len() as u32;
 
         // FIXME: Preallocate with the correct capacity.
         let mut faces = Vec::new();
@@ -85,6 +98,7 @@ impl Cube {
                 // n-cube by manner of it's binary representation.
                 for loc in 0..2_u32.pow(dim - 2) {
                     let mut v = point(insert_bit(insert_bit(loc, d0), d1), dim, size);
+                    let dims = dims_from_point(&dim_names, &v, d0, d1);
 
                     v[d0 as usize] = -size;
                     v[d1 as usize] = -size;
@@ -108,7 +122,7 @@ impl Cube {
                     let vert = top_left - bottom_left;
                     let normal = horiz.cross(&vert);
 
-                    faces.push(Face { points, normal })
+                    faces.push(Face { points, normal, dims })
                 }
             }
         }
