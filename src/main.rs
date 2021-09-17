@@ -5,6 +5,7 @@ mod system;
 mod messages;
 mod server;
 mod camera;
+mod vertex;
 
 use messages::Message;
 

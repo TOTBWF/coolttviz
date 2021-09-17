@@ -9,21 +9,7 @@ use crate::linalg;
 use crate::cube;
 use crate::camera;
 use crate::messages::{DisplayGoal, Label};
-
-#[derive(Copy, Clone, Debug)]
-pub struct Vertex {
-    pub position: [f32; 3],
-    pub color: [f32; 4]
-}
-
-// FIXME: There is probably a smarter way of doing this?
-impl Vertex {
-    fn from_vector(v : Vector3<f32>, color: [f32; 4]) -> Vertex {
-        Vertex { position: [v[0], v[1], v[2]], color }
-    }
-}
-
-implement_vertex!(Vertex, position, color);
+use crate::vertex::{Vertex};
 
 pub struct Scene {
     camera: camera::Camera,
@@ -62,14 +48,14 @@ fn to_window_coords(mvp: Matrix4<f32>, width: f32, height: f32, v : Vector3<f32>
 
 fn face_geometry(face: &cube::Face, color: [f32; 4]) -> Vec<Vertex> {
     vec![
-        Vertex::from_vector(face.points[0], color),
-        Vertex::from_vector(face.points[1], color),
-        Vertex::from_vector(face.points[2], color),
-        Vertex::from_vector(face.points[3], color),
-        Vertex::from_vector(face.points[0], color),
-        Vertex::from_vector(face.points[2], color),
-        Vertex::from_vector(face.points[1], color),
-        Vertex::from_vector(face.points[3], color),
+        Vertex::new(face.points[0], color),
+        Vertex::new(face.points[1], color),
+        Vertex::new(face.points[2], color),
+        Vertex::new(face.points[3], color),
+        Vertex::new(face.points[0], color),
+        Vertex::new(face.points[2], color),
+        Vertex::new(face.points[1], color),
+        Vertex::new(face.points[3], color),
     ]
 }
 
