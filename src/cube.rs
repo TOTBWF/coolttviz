@@ -1,7 +1,9 @@
-use nalgebra::{Point3, Vector3, Similarity3};
+use glium::*;
+use nalgebra::{Point3, Vector3, Similarity3, Matrix4};
 use ordered_float::NotNan;
 
 use crate::linalg;
+use crate::vertex::Vertex;
 
 // Insert a zero bit at 'ix', shifting over the upper bits to compensate.
 fn insert_bit(bits : u32, ix : u32) -> u32 {
@@ -71,11 +73,13 @@ impl Face {
 
 pub struct Cube {
     pub faces: Vec<Face>,
-    pub model: Similarity3<f32>
+    pub model: Similarity3<f32>,
+    pub vbo: VertexBuffer<Vertex>,
+    pub face_vbo: VertexBuffer<Vertex>
 }
 
 impl Cube {
-    pub fn new(dim_names: &[String], size: f32) -> Cube {
+    pub fn new(display: &Display, dim_names: &[String], size: f32) -> Cube {
         let dim = dim_names.len() as u32;
 
         // FIXME: Preallocate with the correct capacity.
@@ -126,15 +130,72 @@ impl Cube {
                 }
             }
         }
-        Cube { faces, model: Similarity3::identity() }
+        let black = [0.0, 0.0, 0.0, 1.0];
+        let cube_geometry : Vec<Vertex> = faces.iter().flat_map(|face| {
+            vec![
+                Vertex::new(face.points[0], black),
+                Vertex::new(face.points[1], black),
+                Vertex::new(face.points[2], black),
+                Vertex::new(face.points[3], black),
+                Vertex::new(face.points[0], black),
+                Vertex::new(face.points[2], black),
+                Vertex::new(face.points[1], black),
+                Vertex::new(face.points[3], black),
+            ]
+        }).collect();
+        let vbo = VertexBuffer::dynamic(display, &cube_geometry).unwrap();
+        let face_vbo = VertexBuffer::empty_dynamic(display, 6).unwrap();
+        Cube {
+            faces,
+            model: Similarity3::identity(),
+            vbo,
+            face_vbo
+        }
     }
 
-    pub fn intersections(&self, origin: Point3<f32>, dir : Vector3<f32>) -> Vec<(Point3<f32>, &Face)> {
-        let mut isects : Vec<(Point3<f32>, &Face)> =
+    pub fn intersections(&self, origin: Point3<f32>, dir : Vector3<f32>) -> Vec<(Point3<f32>, Face)> {
+        let mut isects : Vec<(Point3<f32>, Face)> =
         self.faces.iter().filter_map(|face| {
-            face.intersect(origin, dir).map(|isect| (isect, face))
+            face.intersect(origin, dir).map(|isect| (isect, face.clone()))
         }).collect();
         isects.sort_by_key(|(isect, _)| NotNan::new((origin - isect).norm()).expect("Distance should not be NaN"));
         isects
+    }
+
+    // FIXME: Should the cube own it's shader??
+    pub fn render(&self, view_proj: Matrix4<f32>, shader: &Program, target: &mut Frame) {
+        let view_proj_unif : [[f32; 4]; 4] = view_proj.into();
+        let model_unif : [[f32; 4]; 4] = self.model.to_homogeneous().into();
+        let uniforms = uniform! {
+            model: model_unif,
+            view_projection: view_proj_unif
+        };
+        target.draw(&self.vbo, index::NoIndices(index::PrimitiveType::LinesList), shader, &uniforms, &Default::default()).unwrap();
+    }
+
+    // FIXME: Should the cube own it's shader??
+    pub fn render_face(&mut self, face: &Face, view_proj: Matrix4<f32>, shader: &Program, target: &mut Frame) {
+        let view_proj_unif : [[f32; 4]; 4] = view_proj.into();
+        let model_unif : [[f32; 4]; 4] = self.model.to_homogeneous().into();
+        let uniforms = uniform! {
+            model: model_unif,
+            view_projection: view_proj_unif
+        };
+
+        let red = [1.0, 0.0, 0.0, 0.5];
+        let face_geometry = vec![
+            Vertex::new(face.points[0], red),
+            Vertex::new(face.points[2], red),
+            Vertex::new(face.points[1], red),
+            Vertex::new(face.points[2], red),
+            Vertex::new(face.points[3], red),
+            Vertex::new(face.points[1], red),
+        ];
+        self.face_vbo.write(&face_geometry);
+        let draw_params = DrawParameters {
+            blend: Blend::alpha_blending(),
+            ..Default::default()
+        };
+        target.draw(&self.face_vbo, index::NoIndices(index::PrimitiveType::TrianglesList), shader, &uniforms, &draw_params).unwrap();
     }
 }

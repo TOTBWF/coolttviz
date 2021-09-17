@@ -16,10 +16,7 @@ pub struct Scene {
 
     cube: cube::Cube,
 
-    // Graphics Data
     program: glium::Program,
-    cube_vbo: glium::VertexBuffer<Vertex>,
-    face_vbo: glium::VertexBuffer<Vertex>,
 
     dims: Vec<String>,
     labels: Vec<Label>,
@@ -41,10 +38,6 @@ fn to_window_coords(mvp: Matrix4<f32>, width: f32, height: f32, v : Vector3<f32>
         ((1.0 - y_ndc) / 2.0) * height,
     ]
 }
-
-// fn from_window_coords(mvp: Matrix4<f32>, width: f32, height: f32, w: [f32; 2]) -> Vector3<f32> {
-//     let transform = ()
-// }
 
 fn face_geometry(face: &cube::Face, color: [f32; 4]) -> Vec<Vertex> {
     vec![
@@ -99,17 +92,12 @@ fn init_scene(display: &glium::Display, DisplayGoal { dims, labels, context }: D
         fragment: include_str!("../resources/shader.frag")
     }).unwrap();
 
-    let cube = cube::Cube::new(&dims, 1.0);
-    let cube_geometry = hypercube_geometry(&cube);
-    let cube_vbo = glium::VertexBuffer::dynamic(display, &cube_geometry).unwrap();
-    let face_vbo = glium::VertexBuffer::empty_dynamic(display, 8).unwrap();
+    let cube = cube::Cube::new(display, &dims, 1.0);
 
     Scene {
         camera,
         program,
         cube,
-        cube_vbo,
-        face_vbo,
         dims,
         labels,
         context,
@@ -130,26 +118,10 @@ fn render_frame(ui: &Ui, scene : &mut Scene, target: &mut Frame) {
     let fov = 45.0_f32.to_radians();
     let projection = Perspective3::new(aspect, fov, 0.1, 100.0);
 
-    let mvp = projection.to_homogeneous() * view.to_homogeneous() * scene.cube.model.to_homogeneous();
+    let view_proj = projection.to_homogeneous() * view.to_homogeneous();
+    let mvp = view_proj * scene.cube.model.to_homogeneous();
 
-    let model_unif : [[f32; 4]; 4] = scene.cube.model.to_homogeneous().into();
-    let view_unif : [[f32; 4]; 4] = view.to_homogeneous().into();
-    let projection_unif : [[f32; 4]; 4] = projection.to_homogeneous().into();
-
-    let uniforms = uniform! {
-        model: model_unif,
-        view: view_unif,
-        projection: projection_unif
-    };
-
-    if scene.dark_mode {
-        target.clear_color(0.1, 0.1, 0.1, 1.0);
-    } else {
-        target.clear_color(1.0, 1.0, 1.0, 1.0);
-    }
-
-    let draw_params = Default::default();
-    target.draw(&scene.cube_vbo, &glium::index::NoIndices(glium::index::PrimitiveType::LinesList), &scene.program, &uniforms, &draw_params).unwrap();
+    scene.cube.render(view_proj, &scene.program, target);
 
     for lbl in &scene.labels {
         render_label(ui, mvp, lbl);
@@ -157,14 +129,15 @@ fn render_frame(ui: &Ui, scene : &mut Scene, target: &mut Frame) {
 
     let [width, height] = ui.io().display_size;
     let [mouse_x, mouse_y] = ui.io().mouse_pos;
+
+    // FIXME: Factor this out
     let mouse_ndc_point = Point3::new(-1.0 + 2.0 * (mouse_x / width), 1.0 - 2.0 * (mouse_y / height),  1.0);
     let mouse_view_point = view.inverse() * projection.unproject_point(&mouse_ndc_point);
     let direction = Unit::new_normalize(eye - mouse_view_point);
-    let isects = scene.cube.intersections(eye, *direction);
-    if let Some(&(_, face)) = isects.first() {
-        scene.face_vbo.write(&face_geometry(face, scene.highlight_color));
-        target.draw(&scene.face_vbo, &glium::index::NoIndices(glium::index::PrimitiveType::LinesList), &scene.program, &uniforms, &draw_params).unwrap();
 
+    let isects = scene.cube.intersections(eye, *direction);
+    if let Some((_, face)) = isects.first() {
+        scene.cube.render_face(face, view_proj, &scene.program, target);
         ui.tooltip(|| {
             let mut s = String::new();
             for (nm, d) in &face.dims {
@@ -173,6 +146,9 @@ fn render_frame(ui: &Ui, scene : &mut Scene, target: &mut Frame) {
             ui.text(s);
         });
     };
+
+    // FIXME: Use the begin_ family of functions here to
+    // avoid issues with closures.
 
     // We don't want to have to mutably borrow these fields,
     // as that would prevent us from having any other references
