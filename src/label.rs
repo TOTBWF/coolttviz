@@ -10,18 +10,6 @@ pub struct Label {
     pub txt: String
 }
 
-// FIXME: Move this somewhere else!
-fn to_window_coords(mvp: Matrix4<f32>, width: f32, height: f32, v : Vector3<f32>) -> [f32; 2] {
-    let pos = mvp * Vector4::new(v[0], v[1], v[2], 1.0);
-    let x_ndc = pos[0] / pos[3];
-    let y_ndc = pos[1] / pos[3];
-
-    [
-        ((1.0 + x_ndc) / 2.0) * width,
-        ((1.0 - y_ndc) / 2.0) * height,
-    ]
-}
-
 impl Label {
     pub fn new(dims: &[String], lbl: &messages::Label) -> Label {
         let mut position = Vec::new();
@@ -40,9 +28,8 @@ impl Label {
 
 impl Label {
     pub fn render(&self, mvp: Matrix4<f32>, ui: &Ui) {
-        let [width, height] = ui.io().display_size;
         let projected = linalg::project(&self.position);
-        let window_pos = to_window_coords(mvp, width, height, projected);
+        let window_pos = linalg::window_coords(mvp, ui.io().display_size, projected);
 
         // We want to truncate the label titles here, as they can get absolutely massive.
         let title =

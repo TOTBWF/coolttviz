@@ -4,8 +4,7 @@ use imgui::*;
 use nalgebra::{Perspective3, Unit};
 use nalgebra::{Point3, Vector3, Vector4, Matrix4};
 
-use crate::system;
-use crate::linalg;
+use crate::{linalg, system};
 use crate::cube;
 use crate::camera;
 use crate::label;
@@ -26,17 +25,6 @@ pub struct Scene {
     show_context: bool,
     highlight_color: [f32; 4],
     dark_mode: bool
-}
-
-fn to_window_coords(mvp: Matrix4<f32>, width: f32, height: f32, v : Vector3<f32>) -> [f32; 2] {
-    let pos = mvp * Vector4::new(v[0], v[1], v[2], 1.0);
-    let x_ndc = pos[0] / pos[3];
-    let y_ndc = pos[1] / pos[3];
-
-    [
-        ((1.0 + x_ndc) / 2.0) * width,
-        ((1.0 - y_ndc) / 2.0) * height,
-    ]
 }
 
 fn init_scene(display: &glium::Display, msg: &messages::DisplayGoal) -> Scene {
@@ -83,12 +71,7 @@ fn render_frame(ui: &Ui, scene : &mut Scene, target: &mut Frame) {
         lbl.render(mvp, ui);
     }
 
-    let [width, height] = ui.io().display_size;
-    let [mouse_x, mouse_y] = ui.io().mouse_pos;
-
-    // FIXME: Factor this out
-    let mouse_ndc_point = Point3::new(-1.0 + 2.0 * (mouse_x / width), 1.0 - 2.0 * (mouse_y / height),  1.0);
-    let mouse_view_point = view.inverse() * projection.unproject_point(&mouse_ndc_point);
+    let mouse_view_point = view.inverse() * linalg::world_coords(projection, ui.io().display_size, ui.io().mouse_pos);
     let direction = Unit::new_normalize(eye - mouse_view_point);
 
     let isects = scene.cube.intersections(eye, *direction);
@@ -160,16 +143,6 @@ fn handle_input(ui: &Ui, scene: &mut Scene) {
         scene.camera.zoom(0.1_f32 * io.mouse_wheel);
     }
 }
-
-// pub fn display_goal(msg : DisplayGoal) {
-//     let system = system::init(file!());
-
-//     let mut scene = init_scene(&system.display, msg);
-//     system.main_loop(move |_, display, target, ui| {
-//         handle_input(ui, &mut scene);
-//         render_frame(ui, &mut scene, target);
-//     })
-// }
 
 pub fn display_hypercube(dims : Vec<String>) {
     let system = system::init(3001, file!());
