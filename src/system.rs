@@ -10,6 +10,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use crate::server::Server;
+use crate::messages::Message;
 
 pub struct System {
     pub event_loop: EventLoop<()>,
@@ -82,7 +83,7 @@ pub fn init(port: u32, title: &str) -> System {
 }
 
 impl System {
-    pub fn main_loop<Draw: FnMut(&mut bool, &Display, &mut Frame, &mut Ui) + 'static>(self, mut run_ui: Draw) {
+    pub fn main_loop<Scene: 'static, Handle: FnMut(Message, &Display, &mut Scene) + 'static, Draw: FnMut(&mut bool, &Display, &mut Scene, &mut Frame, &mut Ui) + 'static>(self, mut scene: Scene, mut handle_msg: Handle, mut run_ui: Draw) {
         let System {
             event_loop,
             display,
@@ -97,9 +98,8 @@ impl System {
         event_loop.run(move |event, _, control_flow| {
             let gl_window = display.gl_window();
 
-            let msg = server.poll();
-            if msg.is_some() {
-                println!("Message: {:?}", msg);
+            if let Some(msg) = server.poll() {
+                handle_msg(msg, &display, &mut scene)
             }
 
             match event {
@@ -123,7 +123,7 @@ impl System {
                 let mut target = display.draw();
 
                 target.clear_color_srgb(1.0, 1.0, 1.0, 1.0);
-                run_ui(&mut run, &display, &mut target, &mut ui);
+                run_ui(&mut run, &display, &mut scene, &mut target, &mut ui);
                 if !run {
                     *control_flow = ControlFlow::Exit;
                 }

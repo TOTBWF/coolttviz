@@ -2,7 +2,6 @@ use glium::*;
 use imgui::*;
 
 use nalgebra::{Perspective3, Unit};
-use nalgebra::{Point3, Vector3, Vector4, Matrix4};
 
 use crate::{linalg, system};
 use crate::cube;
@@ -144,13 +143,21 @@ fn handle_input(ui: &Ui, scene: &mut Scene) {
     }
 }
 
-pub fn display_hypercube(dims : Vec<String>) {
-    let system = system::init(3001, file!());
+fn handle_message(msg: messages::Message, display: &Display, scene: &mut Scene) {
+    match msg {
+        messages::Message::DisplayGoal(goal) =>
+            *scene = init_scene(display, &goal)
+    }
+}
 
-    let ctx = "render test\0";
-    let mut scene = init_scene(&system.display, &messages::DisplayGoal { dims, labels: vec![], context: ctx.to_string() });
-    system.main_loop(move |_, display, target, ui| {
-        handle_input(ui, &mut scene);
-        render_frame(ui, &mut scene, target);
+pub fn render() {
+    let system = system::init(3001, file!());
+    let dims = vec!["i".to_string(), "j".to_string(), "k".to_string(), "l".to_string()];
+
+    let ctx = "DEMO\0";
+    let scene = init_scene(&system.display, &messages::DisplayGoal { dims, labels: vec![], context: ctx.to_string() });
+    system.main_loop(scene, handle_message, |_, display, scene, target, ui| {
+        handle_input(ui, scene);
+        render_frame(ui, scene, target);
     })
 }
