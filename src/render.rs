@@ -8,7 +8,8 @@ use crate::system;
 use crate::linalg;
 use crate::cube;
 use crate::camera;
-use crate::messages::{DisplayGoal, Label};
+use crate::label;
+use crate::messages;
 
 pub struct Scene {
     camera: camera::Camera,
@@ -18,7 +19,7 @@ pub struct Scene {
     program: glium::Program,
 
     dims: Vec<String>,
-    labels: Vec<Label>,
+    labels: Vec<label::Label>,
     context: String,
 
     show_debug: bool,
@@ -38,29 +39,7 @@ fn to_window_coords(mvp: Matrix4<f32>, width: f32, height: f32, v : Vector3<f32>
     ]
 }
 
-fn render_label(ui: &Ui, mvp: Matrix4<f32>, lbl: &Label) {
-    let [width, height] = ui.io().display_size;
-    let projected = linalg::project(&lbl.position);
-    let window_pos = to_window_coords(mvp, width, height, projected);
-
-    let title =
-        if lbl.txt.len() > 10 {
-            format!("{}...##{}\0", lbl.txt[0..9 - 3].to_owned(), lbl.txt)
-        } else {
-            format!("{}##{}\0", lbl.txt, lbl.txt)
-        };
-
-    let title_imstr = unsafe { ImStr::from_utf8_with_nul_unchecked(title.as_bytes()) };
-    Window::new(title_imstr)
-        .position(window_pos, Condition::Always)
-        .size([100.0, 100.0], Condition::Appearing)
-        .collapsed(true, Condition::Appearing)
-        .build(ui, || {
-            ui.text(format!("{}\0", lbl.txt));
-        });
-}
-
-fn init_scene(display: &glium::Display, DisplayGoal { dims, labels, context }: DisplayGoal) -> Scene {
+fn init_scene(display: &glium::Display, msg: &messages::DisplayGoal) -> Scene {
     let camera = camera::Camera::new();
 
     let program = program!(display, 140 => {
@@ -68,15 +47,16 @@ fn init_scene(display: &glium::Display, DisplayGoal { dims, labels, context }: D
         fragment: include_str!("../resources/shader.frag")
     }).unwrap();
 
-    let cube = cube::Cube::new(display, &dims, 1.0);
+    let labels = msg.labels.iter().map(|lbl| label::Label::new(&msg.dims, lbl)).collect();
+    let cube = cube::Cube::new(display, &msg.dims, 1.0);
 
     Scene {
         camera,
         program,
         cube,
-        dims,
         labels,
-        context,
+        dims: msg.dims.clone(),
+        context: msg.context.clone(),
         show_debug: false,
         show_context: true,
         highlight_color: [1.0, 0.0, 0.0, 1.0],
@@ -100,7 +80,7 @@ fn render_frame(ui: &Ui, scene : &mut Scene, target: &mut Frame) {
     scene.cube.render(view_proj, &scene.program, target);
 
     for lbl in &scene.labels {
-        render_label(ui, mvp, lbl);
+        lbl.render(mvp, ui);
     }
 
     let [width, height] = ui.io().display_size;
@@ -195,7 +175,7 @@ pub fn display_hypercube(dims : Vec<String>) {
     let system = system::init(3001, file!());
 
     let ctx = "render test\0";
-    let mut scene = init_scene(&system.display, DisplayGoal { dims, labels: vec![], context: ctx.to_string() });
+    let mut scene = init_scene(&system.display, &messages::DisplayGoal { dims, labels: vec![], context: ctx.to_string() });
     system.main_loop(move |_, display, target, ui| {
         handle_input(ui, &mut scene);
         render_frame(ui, &mut scene, target);

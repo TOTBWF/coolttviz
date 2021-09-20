@@ -1,8 +1,10 @@
+use std::collections::HashMap;
+
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct Label {
-    pub position: Vec<f32>,
+    pub position: HashMap<String, f32>,
     pub txt: String
 }
 

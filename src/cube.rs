@@ -72,8 +72,11 @@ impl Face {
 }
 
 pub struct Cube {
+    // The faces after projection.
     pub faces: Vec<Face>,
+
     pub model: Similarity3<f32>,
+
     pub vbo: VertexBuffer<Vertex>,
     pub face_vbo: VertexBuffer<Vertex>
 }
@@ -102,7 +105,7 @@ impl Cube {
                 // n-cube by manner of it's binary representation.
                 for loc in 0..2_u32.pow(dim - 2) {
                     let mut v = point(insert_bit(insert_bit(loc, d0), d1), dim, size);
-                    let dims = dims_from_point(&dim_names, &v, d0, d1);
+                    let dims = dims_from_point(dim_names, &v, d0, d1);
 
                     v[d0 as usize] = -size;
                     v[d1 as usize] = -size;
