@@ -9,6 +9,8 @@ use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use std::path::Path;
 use std::time::Instant;
 
+use crate::server::Server;
+
 pub struct System {
     pub event_loop: EventLoop<()>,
     pub display: glium::Display,
@@ -16,9 +18,10 @@ pub struct System {
     pub platform: WinitPlatform,
     pub renderer: Renderer,
     pub font_size: f32,
+    pub server: Server
 }
 
-pub fn init(title: &str) -> System {
+pub fn init(port: u32, title: &str) -> System {
     let title = match Path::new(&title).file_name() {
         Some(file_name) => file_name.to_str().unwrap(),
         None => title,
@@ -65,6 +68,8 @@ pub fn init(title: &str) -> System {
 
     let renderer = Renderer::init(&mut imgui, &display).expect("Failed to initialize renderer");
 
+    let server = Server::init(port);
+
     System {
         event_loop,
         display,
@@ -72,6 +77,7 @@ pub fn init(title: &str) -> System {
         platform,
         renderer,
         font_size,
+        server
     }
 }
 
@@ -80,6 +86,7 @@ impl System {
         let System {
             event_loop,
             display,
+            server,
             mut imgui,
             mut platform,
             mut renderer,
@@ -89,6 +96,12 @@ impl System {
 
         event_loop.run(move |event, _, control_flow| {
             let gl_window = display.gl_window();
+
+            let msg = server.poll();
+            if msg.is_some() {
+                println!("Message: {:?}", msg);
+            }
+
             match event {
             Event::NewEvents(_) => {
                 let now = Instant::now();

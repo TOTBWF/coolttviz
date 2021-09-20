@@ -9,7 +9,6 @@ use crate::linalg;
 use crate::cube;
 use crate::camera;
 use crate::messages::{DisplayGoal, Label};
-use crate::vertex::{Vertex};
 
 pub struct Scene {
     camera: camera::Camera,
@@ -39,26 +38,6 @@ fn to_window_coords(mvp: Matrix4<f32>, width: f32, height: f32, v : Vector3<f32>
     ]
 }
 
-fn face_geometry(face: &cube::Face, color: [f32; 4]) -> Vec<Vertex> {
-    vec![
-        Vertex::new(face.points[0], color),
-        Vertex::new(face.points[1], color),
-        Vertex::new(face.points[2], color),
-        Vertex::new(face.points[3], color),
-        Vertex::new(face.points[0], color),
-        Vertex::new(face.points[2], color),
-        Vertex::new(face.points[1], color),
-        Vertex::new(face.points[3], color),
-    ]
-}
-
-fn hypercube_geometry(cube: &cube::Cube) -> Vec<Vertex> {
-    // FIXME: This is really not efficient!
-    // We should probably use a mode that isn't GL_LINES here?
-    cube.faces.iter().flat_map(|v| face_geometry(v, [0.0, 0.0, 0.0, 1.0])).collect()
-}
-
-
 fn render_label(ui: &Ui, mvp: Matrix4<f32>, lbl: &Label) {
     let [width, height] = ui.io().display_size;
     let projected = linalg::project(&lbl.position);
@@ -71,10 +50,7 @@ fn render_label(ui: &Ui, mvp: Matrix4<f32>, lbl: &Label) {
             format!("{}##{}\0", lbl.txt, lbl.txt)
         };
 
-
-
     let title_imstr = unsafe { ImStr::from_utf8_with_nul_unchecked(title.as_bytes()) };
-    // let lbl_imstr = unsafe { ImStr::from_utf8_with_nul_unchecked(lbl.as_bytes()) };
     Window::new(title_imstr)
         .position(window_pos, Condition::Always)
         .size([100.0, 100.0], Condition::Appearing)
@@ -205,18 +181,18 @@ fn handle_input(ui: &Ui, scene: &mut Scene) {
     }
 }
 
-pub fn display_goal(msg : DisplayGoal) {
-    let system = system::init(file!());
+// pub fn display_goal(msg : DisplayGoal) {
+//     let system = system::init(file!());
 
-    let mut scene = init_scene(&system.display, msg);
-    system.main_loop(move |_, display, target, ui| {
-        handle_input(ui, &mut scene);
-        render_frame(ui, &mut scene, target);
-    })
-}
+//     let mut scene = init_scene(&system.display, msg);
+//     system.main_loop(move |_, display, target, ui| {
+//         handle_input(ui, &mut scene);
+//         render_frame(ui, &mut scene, target);
+//     })
+// }
 
 pub fn display_hypercube(dims : Vec<String>) {
-    let system = system::init(file!());
+    let system = system::init(3001, file!());
 
     let ctx = "render test\0";
     let mut scene = init_scene(&system.display, DisplayGoal { dims, labels: vec![], context: ctx.to_string() });
