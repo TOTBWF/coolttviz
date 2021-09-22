@@ -9,6 +9,9 @@ use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use std::path::Path;
 use std::time::Instant;
 
+use crate::server::Server;
+use crate::messages::Message;
+
 pub struct System {
     pub event_loop: EventLoop<()>,
     pub display: glium::Display,
@@ -16,9 +19,10 @@ pub struct System {
     pub platform: WinitPlatform,
     pub renderer: Renderer,
     pub font_size: f32,
+    pub server: Server
 }
 
-pub fn init(title: &str) -> System {
+pub fn init(port: u32, title: &str) -> System {
     let title = match Path::new(&title).file_name() {
         Some(file_name) => file_name.to_str().unwrap(),
         None => title,
@@ -65,6 +69,8 @@ pub fn init(title: &str) -> System {
 
     let renderer = Renderer::init(&mut imgui, &display).expect("Failed to initialize renderer");
 
+    let server = Server::init(port);
+
     System {
         event_loop,
         display,
@@ -72,14 +78,16 @@ pub fn init(title: &str) -> System {
         platform,
         renderer,
         font_size,
+        server
     }
 }
 
 impl System {
-    pub fn main_loop<Draw: FnMut(&mut bool, &mut Frame, &mut Ui) + 'static>(self, mut run_ui: Draw) {
+    pub fn main_loop<Scene: 'static, Handle: FnMut(Message, &Display, &mut Scene) + 'static, Draw: FnMut(&mut bool, &Display, &mut Scene, &mut Frame, &mut Ui) + 'static>(self, mut scene: Scene, mut handle_msg: Handle, mut run_ui: Draw) {
         let System {
             event_loop,
             display,
+            server,
             mut imgui,
             mut platform,
             mut renderer,
@@ -89,6 +97,11 @@ impl System {
 
         event_loop.run(move |event, _, control_flow| {
             let gl_window = display.gl_window();
+
+            if let Some(msg) = server.poll() {
+                handle_msg(msg, &display, &mut scene)
+            }
+
             match event {
             Event::NewEvents(_) => {
                 let now = Instant::now();
@@ -110,7 +123,7 @@ impl System {
                 let mut target = display.draw();
 
                 target.clear_color_srgb(1.0, 1.0, 1.0, 1.0);
-                run_ui(&mut run, &mut target, &mut ui);
+                run_ui(&mut run, &display, &mut scene, &mut target, &mut ui);
                 if !run {
                     *control_flow = ControlFlow::Exit;
                 }
