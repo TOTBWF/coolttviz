@@ -19,11 +19,6 @@ pub struct Scene {
     dims: Vec<String>,
     labels: Vec<label::Label>,
     context: String,
-
-    show_debug: bool,
-    show_context: bool,
-    highlight_color: [f32; 4],
-    dark_mode: bool
 }
 
 fn init_scene(display: &glium::Display, msg: &messages::DisplayGoal) -> Scene {
@@ -44,10 +39,6 @@ fn init_scene(display: &glium::Display, msg: &messages::DisplayGoal) -> Scene {
         labels,
         dims: msg.dims.clone(),
         context: msg.context.clone(),
-        show_debug: false,
-        show_context: true,
-        highlight_color: [1.0, 0.0, 0.0, 1.0],
-        dark_mode: false
     }
 }
 
@@ -85,50 +76,12 @@ fn render_frame(ui: &Ui, scene : &mut Scene, target: &mut Frame) {
         });
     };
 
-    // FIXME: Use the begin_ family of functions here to
-    // avoid issues with closures.
-
-    // We don't want to have to mutably borrow these fields,
-    // as that would prevent us from having any other references
-    // to parts of scene, so we just make copies here and then update the
-    // scene at the end of the frame.
-    let mut show_debug = scene.show_debug;
-    let mut show_context = scene.show_context;
-    let mut highlight_color = scene.highlight_color;
-    let mut dark_mode = scene.dark_mode;
-
-    ui.main_menu_bar(|| {
-        ui.menu(im_str!("Menu"), || {
-            ui.checkbox(im_str!("Show Context"), &mut show_context);
-            ui.checkbox(im_str!("Debug Panel"), &mut show_debug);
-        });
-    });
-
-    if scene.show_debug {
-        Window::new(im_str!("Debug")).build(ui, || {
-            ui.text(format!("Camera Position: {} {} {}", eye[0], eye[1], eye[2]));
-            if CollapsingHeader::new(im_str!("Intersections")).default_open(false).build(ui) {
-                for (isect, _) in isects {
-                    ui.text(format!("{} {} {}", isect[0], isect[1], isect[2]))
-                }
-            }
-            ui.spacing();
-            ColorPicker::new(im_str!("Highlight Color"), &mut highlight_color).build(ui);
-            ui.checkbox(im_str!("Dark Mode"), &mut dark_mode);
-        });
-    }
-
-    if scene.show_context {
-        let ctx = unsafe { ImStr::from_utf8_with_nul_unchecked(scene.context.as_bytes()) };
-        Window::new(im_str!("Context")).build(ui, || {
+    let ctx = unsafe { ImStr::from_utf8_with_nul_unchecked(scene.context.as_bytes()) };
+    Window::new(im_str!("Context"))
+        .size([200.0, 200.0], Condition::Appearing)
+        .build(ui, || {
             ui.text_wrapped(ctx)
         });
-    }
-
-    scene.show_context = show_context;
-    scene.show_debug = show_debug;
-    scene.dark_mode = dark_mode;
-    scene.highlight_color = highlight_color;
 }
 
 fn handle_input(ui: &Ui, scene: &mut Scene) {
@@ -154,7 +107,7 @@ pub fn render() {
     let system = system::init(3001, file!());
     let dims = vec!["i".to_string(), "j".to_string(), "k".to_string(), "l".to_string()];
 
-    let ctx = "DEMO\0";
+    let ctx = "Welcome to coolttviz!\nPlease add a #viz hole to your code to start visualizing your goals.\0";
     let scene = init_scene(&system.display, &messages::DisplayGoal { dims, labels: vec![], context: ctx.to_string() });
     system.main_loop(scene, handle_message, |_, display, scene, target, ui| {
         handle_input(ui, scene);
